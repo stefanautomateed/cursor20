@@ -7,6 +7,7 @@ import StreamingEditor from '@/components/StreamingEditor';
 import PlanningView from '@/components/PlanningView';
 import { FileItem, Message, ProjectPlan, Task } from '@/types';
 import { findFileByPath, updateFileContent, addFile, deleteFile, buildPreviewHTML, downloadProject } from '@/lib/fileUtils';
+import { AVAILABLE_MODELS, DEFAULT_MODEL_ID, getModelById } from '@/lib/modelConfig';
 
 export default function Home() {
   const [prompt, setPrompt] = useState('');
@@ -19,6 +20,7 @@ export default function Home() {
   const [view, setView] = useState<'split' | 'code' | 'preview'>('split');
   const [newFileName, setNewFileName] = useState('');
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
+  const [selectedModelId, setSelectedModelId] = useState(DEFAULT_MODEL_ID);
 
   // Planning and autonomous execution state
   const [isPlanning, setIsPlanning] = useState(false);
@@ -103,7 +105,7 @@ export default function Home() {
       const planResponse = await fetch('/api/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: userPrompt }),
+        body: JSON.stringify({ prompt: userPrompt, modelId: selectedModelId }),
       });
 
       if (!planResponse.ok) throw new Error('Failed to create plan');
@@ -128,9 +130,8 @@ export default function Home() {
       });
       setTasks(generatedTasks);
 
-      // Step 3: Execute tasks sequentially
-      for (const task of generatedTasks) {
-        setCurrentTask(task);
+      // Step 3: Execute tasks in parallel for speed
+      const executeTask = async (task: Task) => {
         setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'in_progress' } : t));
 
         try {
@@ -141,6 +142,7 @@ export default function Home() {
               task,
               projectPlan: plan,
               existingFiles: files,
+              modelId: selectedModelId,
             }),
           });
 
@@ -156,7 +158,6 @@ export default function Home() {
               if (done) break;
               const chunk = decoder.decode(value);
               accumulatedCode += chunk;
-              // Don't show raw JSON stream in autonomous mode - users will see files being added instead
             }
           }
 
@@ -201,12 +202,14 @@ export default function Home() {
           }
 
           setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed' } : t));
-          setStreamingText('');
         } catch (error) {
           console.error('Task execution error:', error);
           setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'failed' } : t));
         }
-      }
+      };
+
+      // Execute all tasks in parallel
+      await Promise.all(generatedTasks.map(task => executeTask(task)));
 
       setCurrentTask(null);
     } catch (error) {
@@ -250,6 +253,7 @@ export default function Home() {
           conversationHistory: conversationHistory,
           currentFiles: files,
           operation,
+          modelId: selectedModelId,
         }),
       });
 
@@ -529,6 +533,42 @@ export default function Home() {
                   />
                 </div>
 
+                {/* Model Selector */}
+                <div className="space-y-2">
+                  <label className="text-sm text-gray-400 font-medium">AI Model</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {AVAILABLE_MODELS.map((model) => (
+                      <button
+                        key={model.id}
+                        type="button"
+                        onClick={() => setSelectedModelId(model.id)}
+                        className={`p-4 rounded-lg border-2 transition-all text-left ${
+                          selectedModelId === model.id
+                            ? 'border-purple-500 bg-purple-500/10'
+                            : 'border-gray-800 bg-[#1a1a1a] hover:border-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-semibold text-white text-sm">{model.name}</span>
+                          <div className="flex gap-1">
+                            {model.speed === 'fast' && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
+                                Fast
+                              </span>
+                            )}
+                            {model.quality === 'excellent' && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                                Best
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-400">{model.description}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <button
                   type="submit"
                   disabled={isGenerating || !prompt.trim()}
@@ -620,7 +660,7 @@ export default function Home() {
             </div>
 
             {/* Task Progress Status Bar */}
-            {currentTask && !isPlanning && (
+            {tasks.length > 0 && !isPlanning && tasks.filter(t => t.status !== 'completed').length > 0 && (
               <div className="border-t border-gray-800 bg-gradient-to-r from-purple-900/30 to-pink-900/30 px-4 py-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
@@ -630,7 +670,7 @@ export default function Home() {
                     </div>
                     <div>
                       <div className="text-sm font-medium text-purple-300">
-                        {currentTask.title}
+                        Generating website... ({tasks.filter(t => t.status === 'in_progress').length} tasks running)
                       </div>
                       <div className="text-xs text-gray-400">
                         {tasks.filter(t => t.status === 'completed').length} of {tasks.length} tasks completed

@@ -1,21 +1,23 @@
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
+import { getModelById } from '@/lib/modelConfig';
 
 // Using Node runtime for better environment variable support
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
-    const { prompt } = await req.json();
+    const { prompt, modelId = 'gpt-4o-mini' } = await req.json();
 
     if (!prompt) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    // Initialize Anthropic client inside the function to ensure env vars are loaded
-    const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY || '',
-    });
+    const modelConfig = getModelById(modelId);
+    if (!modelConfig) {
+      return NextResponse.json({ error: 'Invalid model ID' }, { status: 400 });
+    }
 
     const systemPrompt = `You are an expert web architect and project planner. When given a high-level website request, you create comprehensive, detailed project plans.
 
@@ -61,17 +63,42 @@ IMPORTANT:
 - Prioritize pages (1 = highest priority)
 - Return ONLY valid JSON, no markdown`;
 
-    const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
-      temperature: 0.8,
-      system: systemPrompt,
-      messages: [
-        { role: 'user', content: `Create a comprehensive plan for: ${prompt}` }
-      ],
-    });
+    let planText = '';
 
-    const planText = completion.content[0].type === 'text' ? completion.content[0].text : '';
+    if (modelConfig.provider === 'anthropic') {
+      const anthropic = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY || '',
+      });
+
+      const completion = await anthropic.messages.create({
+        model: modelConfig.model,
+        max_tokens: 4000,
+        temperature: 0.8,
+        system: systemPrompt,
+        messages: [
+          { role: 'user', content: `Create a comprehensive plan for: ${prompt}` }
+        ],
+      });
+
+      planText = completion.content[0].type === 'text' ? completion.content[0].text : '';
+    } else {
+      // OpenAI
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY || '',
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: modelConfig.model,
+        max_tokens: 4000,
+        temperature: 0.8,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Create a comprehensive plan for: ${prompt}` }
+        ],
+      });
+
+      planText = completion.choices[0].message.content || '';
+    }
 
     // Try to extract JSON
     let jsonStr = planText.trim();

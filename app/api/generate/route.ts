@@ -1,22 +1,24 @@
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 import { FileItem } from '@/types';
+import { getModelById } from '@/lib/modelConfig';
 
 // Using Node runtime for better environment variable support
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, conversationHistory, currentFiles, operation } = await req.json();
+    const { prompt, conversationHistory, currentFiles, operation, modelId = 'gpt-4o-mini' } = await req.json();
 
     if (!prompt) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    // Initialize Anthropic client inside the function to ensure env vars are loaded
-    const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY || '',
-    });
+    const modelConfig = getModelById(modelId);
+    if (!modelConfig) {
+      return NextResponse.json({ error: 'Invalid model ID' }, { status: 400 });
+    }
 
     const systemPrompt = `You are an elite web developer and designer who creates STUNNING, ultra-modern websites with impeccable attention to detail.
 
@@ -75,75 +77,154 @@ CODE QUALITY:
 
 ALWAYS return valid JSON with the "files" array. Each file object must have "name" and "content" properties.`;
 
-    // Build messages for Claude
-    const messages: Anthropic.MessageParam[] = [];
+    const encoder = new TextEncoder();
 
-    // Add context about current files if they exist
-    if (currentFiles && currentFiles.length > 0 && operation !== 'create') {
-      const filesContext = (currentFiles as FileItem[])
-        .map((f: FileItem) => `\n=== ${f.name} ===\n${f.content || ''}`)
-        .join('\n\n');
+    if (modelConfig.provider === 'anthropic') {
+      const anthropic = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY || '',
+      });
 
+      const messages: Anthropic.MessageParam[] = [];
+
+      // Add context about current files if they exist
+      if (currentFiles && currentFiles.length > 0 && operation !== 'create') {
+        const filesContext = (currentFiles as FileItem[])
+          .map((f: FileItem) => `\n=== ${f.name} ===\n${f.content || ''}`)
+          .join('\n\n');
+
+        messages.push({
+          role: 'user',
+          content: `Current project files:\n${filesContext}\n\nOperation: ${operation.toUpperCase()}`,
+        });
+        messages.push({
+          role: 'assistant',
+          content: 'I understand the current project files and the operation mode. I\'m ready to help.',
+        });
+      }
+
+      // Add conversation history if exists
+      if (conversationHistory && conversationHistory.length > 0) {
+        conversationHistory.forEach((msg: any) => {
+          if (msg.role === 'user' || msg.role === 'assistant') {
+            messages.push({
+              role: msg.role,
+              content: msg.content,
+            });
+          }
+        });
+      }
+
+      // Add current prompt
       messages.push({
         role: 'user',
-        content: `Current project files:\n${filesContext}\n\nOperation: ${operation.toUpperCase()}`,
+        content: prompt,
       });
-      messages.push({
-        role: 'assistant',
-        content: 'I understand the current project files and the operation mode. I\'m ready to help.',
+
+      const stream = await anthropic.messages.stream({
+        model: modelConfig.model,
+        max_tokens: 8000,
+        temperature: 0.7,
+        system: systemPrompt,
+        messages,
       });
-    }
 
-    // Add conversation history if exists
-    if (conversationHistory && conversationHistory.length > 0) {
-      conversationHistory.forEach((msg: any) => {
-        if (msg.role === 'user' || msg.role === 'assistant') {
-          messages.push({
-            role: msg.role,
-            content: msg.content,
-          });
-        }
-      });
-    }
-
-    // Add current prompt
-    messages.push({
-      role: 'user',
-      content: prompt,
-    });
-
-    const stream = await anthropic.messages.stream({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
-      temperature: 0.7,
-      system: systemPrompt,
-      messages,
-    });
-
-    // Create a readable stream for the response
-    const encoder = new TextEncoder();
-    const customStream = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of stream) {
-            if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-              const content = chunk.delta.text;
-              controller.enqueue(encoder.encode(content));
+      const customStream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const chunk of stream) {
+              if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+                const content = chunk.delta.text;
+                controller.enqueue(encoder.encode(content));
+              }
             }
+            controller.close();
+          } catch (error) {
+            controller.error(error);
           }
-          controller.close();
-        } catch (error) {
-          controller.error(error);
-        }
-      },
-    });
+        },
+      });
 
-    return new Response(customStream, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-cache',
-      },
-    });
+      return new Response(customStream, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-cache',
+        },
+      });
+    } else {
+      // OpenAI
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY || '',
+      });
+
+      const messages: OpenAI.ChatCompletionMessageParam[] = [
+        { role: 'system', content: systemPrompt }
+      ];
+
+      // Add context about current files if they exist
+      if (currentFiles && currentFiles.length > 0 && operation !== 'create') {
+        const filesContext = (currentFiles as FileItem[])
+          .map((f: FileItem) => `\n=== ${f.name} ===\n${f.content || ''}`)
+          .join('\n\n');
+
+        messages.push({
+          role: 'user',
+          content: `Current project files:\n${filesContext}\n\nOperation: ${operation.toUpperCase()}`,
+        });
+        messages.push({
+          role: 'assistant',
+          content: 'I understand the current project files and the operation mode. I\'m ready to help.',
+        });
+      }
+
+      // Add conversation history if exists
+      if (conversationHistory && conversationHistory.length > 0) {
+        conversationHistory.forEach((msg: any) => {
+          if (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system') {
+            messages.push({
+              role: msg.role,
+              content: msg.content,
+            });
+          }
+        });
+      }
+
+      // Add current prompt
+      messages.push({
+        role: 'user',
+        content: prompt,
+      });
+
+      const stream = await openai.chat.completions.create({
+        model: modelConfig.model,
+        max_tokens: 8000,
+        temperature: 0.7,
+        messages,
+        stream: true,
+      });
+
+      const customStream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const chunk of stream) {
+              const content = chunk.choices[0]?.delta?.content || '';
+              if (content) {
+                controller.enqueue(encoder.encode(content));
+              }
+            }
+            controller.close();
+          } catch (error) {
+            controller.error(error);
+          }
+        },
+      });
+
+      return new Response(customStream, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-cache',
+        },
+      });
+    }
   } catch (error: any) {
     console.error('Error generating code:', error);
     return NextResponse.json(
