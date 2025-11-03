@@ -131,8 +131,13 @@ export default function Home() {
       setTasks(generatedTasks);
 
       // Step 3: Execute tasks in parallel for speed
-      const executeTask = async (task: Task) => {
+      const executeTask = async (task: Task, isFirstTask: boolean) => {
         setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'in_progress' } : t));
+
+        // Show streaming for the first task to give live coding feedback
+        if (isFirstTask) {
+          setCurrentTask(task);
+        }
 
         try {
           const taskResponse = await fetch('/api/execute-task', {
@@ -158,6 +163,11 @@ export default function Home() {
               if (done) break;
               const chunk = decoder.decode(value);
               accumulatedCode += chunk;
+
+              // Show live streaming for the first task
+              if (isFirstTask) {
+                setStreamingText(accumulatedCode);
+              }
             }
           }
 
@@ -202,14 +212,19 @@ export default function Home() {
           }
 
           setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed' } : t));
+
+          // Clear streaming text when first task completes
+          if (isFirstTask) {
+            setStreamingText('');
+          }
         } catch (error) {
           console.error('Task execution error:', error);
           setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'failed' } : t));
         }
       };
 
-      // Execute all tasks in parallel
-      await Promise.all(generatedTasks.map(task => executeTask(task)));
+      // Execute all tasks in parallel, but track the first one for streaming display
+      await Promise.all(generatedTasks.map((task, index) => executeTask(task, index === 0)));
 
       setCurrentTask(null);
     } catch (error) {
@@ -670,10 +685,14 @@ export default function Home() {
                     </div>
                     <div>
                       <div className="text-sm font-medium text-purple-300">
-                        Generating website... ({tasks.filter(t => t.status === 'in_progress').length} tasks running)
+                        {currentTask && streamingText ? (
+                          <>Streaming: {currentTask.title}</>
+                        ) : (
+                          <>Generating website... ({tasks.filter(t => t.status === 'in_progress').length} tasks running)</>
+                        )}
                       </div>
                       <div className="text-xs text-gray-400">
-                        {tasks.filter(t => t.status === 'completed').length} of {tasks.length} tasks completed
+                        {tasks.filter(t => t.status === 'completed').length} of {tasks.length} tasks completed • {tasks.filter(t => t.status === 'in_progress').length} in progress
                       </div>
                     </div>
                   </div>
