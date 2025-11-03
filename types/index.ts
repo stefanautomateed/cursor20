@@ -32,3 +32,38 @@ export interface FileOperation {
   path: string;
   content?: string;
 }
+
+export interface ProjectPlan {
+  description: string;
+  pages: PagePlan[];
+  structure: string[];
+  designTheme: {
+    colors: string[];
+    typography: string;
+    style: string;
+  };
+}
+
+export interface PagePlan {
+  name: string;
+  route: string;
+  description: string;
+  sections: SectionPlan[];
+  priority: number;
+}
+
+export interface SectionPlan {
+  name: string;
+  description: string;
+  features: string[];
+}
+
+export interface Task {
+  id: string;
+  type: 'page' | 'section' | 'component' | 'style';
+  title: string;
+  description: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  output?: FileItem[];
+  dependencies?: string[];
+}

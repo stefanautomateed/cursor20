@@ -4,7 +4,8 @@ import { useState, useRef, useEffect } from 'react';
 import FileExplorer from '@/components/FileExplorer';
 import CodeEditor from '@/components/CodeEditor';
 import GenerationProgress from '@/components/GenerationProgress';
-import { FileItem, Message } from '@/types';
+import PlanningView from '@/components/PlanningView';
+import { FileItem, Message, ProjectPlan, Task } from '@/types';
 import { findFileByPath, updateFileContent, addFile, deleteFile, buildPreviewHTML, downloadProject } from '@/lib/fileUtils';
 
 export default function Home() {
@@ -18,6 +19,14 @@ export default function Home() {
   const [view, setView] = useState<'split' | 'code' | 'preview'>('split');
   const [newFileName, setNewFileName] = useState('');
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
+
+  // Planning and autonomous execution state
+  const [isPlanning, setIsPlanning] = useState(false);
+  const [projectPlan, setProjectPlan] = useState<ProjectPlan | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [currentTask, setCurrentTask] = useState<Task | null>(null);
+  const [useAutonomousMode, setUseAutonomousMode] = useState(true); // Toggle for autonomous vs simple mode
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const selectedFile = selectedFilePath ? findFileByPath(files, selectedFilePath) : null;
@@ -79,6 +88,131 @@ export default function Home() {
       }
     } catch (e) {
       // Silently fail - JSON might not be complete yet
+    }
+  };
+
+  // Autonomous generation with AI planning
+  const generateAutonomously = async (userPrompt: string) => {
+    setIsGenerating(true);
+    setIsPlanning(true);
+    setShowWelcome(false);
+    setPrompt('');
+
+    try {
+      // Step 1: Create plan
+      const planResponse = await fetch('/api/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: userPrompt }),
+      });
+
+      if (!planResponse.ok) throw new Error('Failed to create plan');
+
+      const { plan } = await planResponse.json();
+      setProjectPlan(plan);
+      setIsPlanning(false);
+
+      // Step 2: Create tasks from plan
+      const generatedTasks: Task[] = [];
+      plan.pages.forEach((page: any, pageIdx: number) => {
+        page.sections.forEach((section: any, secIdx: number) => {
+          generatedTasks.push({
+            id: `task-${pageIdx}-${secIdx}`,
+            type: 'section',
+            title: `${page.name} - ${section.name}`,
+            description: `${section.description}. Features: ${section.features.join(', ')}`,
+            status: 'pending',
+            dependencies: [],
+          });
+        });
+      });
+      setTasks(generatedTasks);
+
+      // Step 3: Execute tasks sequentially
+      for (const task of generatedTasks) {
+        setCurrentTask(task);
+        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'in_progress' } : t));
+
+        try {
+          const taskResponse = await fetch('/api/execute-task', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              task,
+              projectPlan: plan,
+              existingFiles: files,
+            }),
+          });
+
+          if (!taskResponse.ok) throw new Error('Task execution failed');
+
+          const reader = taskResponse.body?.getReader();
+          const decoder = new TextDecoder();
+          let accumulatedCode = '';
+
+          if (reader) {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              const chunk = decoder.decode(value);
+              accumulatedCode += chunk;
+              setStreamingText(accumulatedCode);
+            }
+          }
+
+          // Parse and add files from task
+          try {
+            let jsonStr = accumulatedCode.trim();
+            if (jsonStr.includes('```json')) {
+              const match = jsonStr.match(/```json\s*\n([\s\S]*?)\n```/);
+              if (match) jsonStr = match[1];
+            } else if (jsonStr.includes('```')) {
+              const match = jsonStr.match(/```\s*\n([\s\S]*?)\n```/);
+              if (match) jsonStr = match[1];
+            }
+
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.files && Array.isArray(parsed.files)) {
+              setFiles(currentFiles => {
+                let updatedFiles = [...currentFiles];
+                parsed.files.forEach((newFile: any) => {
+                  const existing = findFileByPath(updatedFiles, newFile.name);
+                  if (existing) {
+                    updatedFiles = updateFileContent(updatedFiles, newFile.name, newFile.content);
+                  } else {
+                    updatedFiles = addFile(updatedFiles, {
+                      name: newFile.name,
+                      path: newFile.name,
+                      type: 'file',
+                      content: newFile.content,
+                    });
+                  }
+                });
+                return updatedFiles;
+              });
+            }
+          } catch (e) {
+            console.error('Failed to parse task output:', e);
+          }
+
+          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed' } : t));
+          setStreamingText('');
+        } catch (error) {
+          console.error('Task execution error:', error);
+          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'failed' } : t));
+        }
+      }
+
+      setCurrentTask(null);
+    } catch (error) {
+      console.error('Autonomous generation error:', error);
+      alert('Failed to generate project. Please try again.');
+    } finally {
+      setIsGenerating(false);
+      setTimeout(() => {
+        setProjectPlan(null);
+        setTasks([]);
+      }, 3000);
     }
   };
 
@@ -230,7 +364,14 @@ export default function Home() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    generateCode(prompt);
+    const isFirstGeneration = files.length === 0;
+
+    // Use autonomous mode for initial generation, simple mode for refinements
+    if (isFirstGeneration && useAutonomousMode) {
+      generateAutonomously(prompt);
+    } else {
+      generateCode(prompt);
+    }
   };
 
   const handleFileChange = (content: string) => {
@@ -541,7 +682,15 @@ export default function Home() {
       {/* Generation Progress Overlay */}
       <GenerationProgress
         streamingText={streamingText}
-        isGenerating={isGenerating}
+        isGenerating={isGenerating && !isPlanning && !projectPlan}
+      />
+
+      {/* Planning View Overlay */}
+      <PlanningView
+        plan={projectPlan}
+        tasks={tasks}
+        currentTask={currentTask}
+        isPlanning={isPlanning}
       />
     </div>
   );

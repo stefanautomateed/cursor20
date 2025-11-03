@@ -8,8 +8,15 @@ A modern, AI-powered platform for creating beautiful websites in seconds. Simply
 
 ## ✨ Features
 
+### 🧠 Autonomous AI Agent System
+- **Intelligent Planning**: AI analyzes your request and creates a comprehensive multi-page project plan
+- **Self-Directed Execution**: AI breaks down the project into tasks and executes them autonomously
+- **Multi-Request Pipeline**: Large projects split across multiple AI calls for depth and quality
+- **Task-Based Generation**: Each page section gets dedicated AI attention for exceptional detail
+- **Progress Visualization**: Watch AI plan, design, and build your entire project step-by-step
+
 ### Core Features
-- **🤖 AI-Powered Generation**: Uses GPT-4o to generate stunning, ultra-modern websites with impeccable design
+- **🤖 Hybrid AI Models**: GPT-4o-mini for planning, GPT-4o for impeccable code generation
 - **📁 Multi-File Projects**: Automatically creates proper project structures (HTML, CSS, JS files)
 - **🔄 Iterative Refinement**: Polish and improve your website without regenerating everything - AI makes surgical edits
 - **🗂️ File Explorer**: Browse, create, edit, and delete files in your project
@@ -68,17 +75,48 @@ A modern, AI-powered platform for creating beautiful websites in seconds. Simply
 
 ## 🎯 How to Use
 
-### Initial Creation
-1. **Describe Your Vision**
-   - Enter a detailed description of the website you want to create
-   - Be specific about features, style, and functionality
-   - Example: "A stunning landing page for a tech startup with glassmorphism effects, animated hero section, feature grid, and pricing table"
+### 🤖 Autonomous Mode (Initial Generation)
 
-2. **Watch AI Build Your Project**
-   - AI generates a complete multi-file project (HTML, CSS, JS)
-   - Files appear in the file explorer on the left
-   - See real-time streaming of code generation
-   - Preview updates automatically as files are created
+When you first create a project, Vibe Coder uses **Autonomous AI Agent Mode**:
+
+1. **You Say**: "Create a birdwatching website"
+
+2. **AI Planning Phase** (GPT-4o-mini):
+   - Analyzes your request
+   - Designs complete multi-page architecture
+   - Plans design theme (colors, typography, style)
+   - Breaks down into pages (Home, About, Gallery, etc.)
+   - Creates detailed section-by-section plan
+
+3. **AI Execution Phase** (GPT-4o):
+   - Executes each task autonomously
+   - Generates Homepage → Hero Section
+   - Generates Homepage → Features Grid
+   - Generates Homepage → Gallery
+   - Generates About Page → sections
+   - Continues until complete
+
+4. **Watch the Magic**:
+   - See planning screen with project overview
+   - Watch each page/section being built
+   - Real-time progress tracking
+   - Files populate as they're created
+
+**Example**: Instead of you having to say "add a hero section, then a features section, then..." - the AI figures it all out and executes autonomously!
+
+### ✏️ Simple Mode (Refinements)
+
+After initial creation, refinements use direct generation:
+
+1. **Quick Edits**
+   - "Make the header sticky"
+   - "Change colors to blue"
+   - "Add smooth animations"
+
+2. **AI Makes Surgical Edits**
+   - Sees all your files
+   - Updates only what's needed
+   - Preserves your work
 
 ### Iterative Refinement
 3. **Polish & Improve**
