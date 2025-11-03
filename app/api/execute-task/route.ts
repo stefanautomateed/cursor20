@@ -19,24 +19,49 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid model ID' }, { status: 400 });
     }
 
+    // Build context of existing files with their content
+    const existingFilesContext = existingFiles && existingFiles.length > 0
+      ? existingFiles.map((f: any) => `\n=== ${f.name} ===\n${f.content || ''}`).join('\n\n')
+      : 'No existing files yet - this is the first task';
+
     const systemPrompt = `You are an elite web developer executing a specific task within a larger project.
 
 PROJECT CONTEXT:
 ${JSON.stringify(projectPlan, null, 2)}
 
-EXISTING FILES:
-${existingFiles?.map((f: any) => f.name).join(', ') || 'None yet'}
+EXISTING FILES (IMPORTANT - Review these to understand what's already built):
+${existingFilesContext}
 
 YOUR TASK:
 ${JSON.stringify(task, null, 2)}
 
-INSTRUCTIONS:
-1. Focus ONLY on this specific task
-2. Generate high-quality, production-ready code
-3. Use ultra-modern design (glassmorphism, gradients, animations)
-4. Ensure consistency with project theme
-5. Make it visually stunning and professional
-6. Add smooth interactions and micro-animations
+⚠️ CRITICAL INSTRUCTIONS ⚠️
+
+1. **REVIEW EXISTING FILES FIRST**:
+   - Carefully read all existing files above
+   - Understand what's already been implemented
+   - Identify what classes, IDs, and structures already exist
+   - Build on top of existing code, don't duplicate or conflict
+
+2. **INCREMENTAL DEVELOPMENT**:
+   - This task is part of a larger project being built in parallel
+   - Other tasks may be running simultaneously
+   - Focus ONLY on this specific task's section/feature
+   - Don't recreate files that already exist - modify them
+   - If a file exists (like index.html), ADD to it, don't replace it entirely
+
+3. **COORDINATION**:
+   - Use consistent naming with existing files
+   - Reuse existing CSS variables and classes where possible
+   - Don't duplicate CSS rules that might already exist
+   - Ensure your code integrates smoothly with existing code
+
+4. **OUTPUT**:
+   - If modifying an existing file, return the COMPLETE file with your additions
+   - If creating a new file, return just that new file
+   - Use ultra-modern design (glassmorphism, gradients, animations)
+   - Ensure consistency with project theme
+   - Make it visually stunning and professional
 
 OUTPUT FORMAT (must be valid JSON):
 {
