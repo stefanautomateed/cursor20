@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 import { FileItem } from '@/types';
 import { getModelById } from '@/lib/modelConfig';
+import { DESIGN_PRINCIPLES } from '@/lib/designSystem';
 
 // Using Node runtime for better environment variable support
 export const runtime = 'nodejs';
@@ -21,6 +22,8 @@ export async function POST(req: NextRequest) {
     }
 
     const systemPrompt = `You are an elite Next.js 14 developer and designer who creates STUNNING, ultra-modern web applications with impeccable attention to detail.
+
+${DESIGN_PRINCIPLES}
 
 Your designs are characterized by:
 - Cutting-edge modern aesthetics (glassmorphism, gradients, subtle animations)

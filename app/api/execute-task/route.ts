@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 import { getModelById } from '@/lib/modelConfig';
+import { DESIGN_PRINCIPLES } from '@/lib/designSystem';
 
 // Using Node runtime for better environment variable support
 export const runtime = 'nodejs';
@@ -25,6 +26,8 @@ export async function POST(req: NextRequest) {
       : 'No existing files yet - this is the first task';
 
     const systemPrompt = `You are an elite Next.js 14 developer executing a specific task within a larger project.
+
+${DESIGN_PRINCIPLES}
 
 PROJECT CONTEXT:
 ${JSON.stringify(projectPlan, null, 2)}

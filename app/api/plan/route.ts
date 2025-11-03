@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 import { getModelById } from '@/lib/modelConfig';
+import { DESIGN_PRINCIPLES } from '@/lib/designSystem';
 
 // Using Node runtime for better environment variable support
 export const runtime = 'nodejs';
@@ -20,6 +21,8 @@ export async function POST(req: NextRequest) {
     }
 
     const systemPrompt = `You are an expert Next.js 14 architect and project planner specializing in modern web applications.
+
+${DESIGN_PRINCIPLES}
 
 Your job is to:
 1. Understand the user's vision and expand on it
