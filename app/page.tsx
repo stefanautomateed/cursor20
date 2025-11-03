@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import FileExplorer from '@/components/FileExplorer';
 import CodeEditor from '@/components/CodeEditor';
+import GenerationProgress from '@/components/GenerationProgress';
 import { FileItem, Message } from '@/types';
 import { findFileByPath, updateFileContent, addFile, deleteFile, buildPreviewHTML, downloadProject } from '@/lib/fileUtils';
 
@@ -11,6 +12,7 @@ export default function Home() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
   const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
   const [showWelcome, setShowWelcome] = useState(true);
   const [view, setView] = useState<'split' | 'code' | 'preview'>('split');
@@ -20,10 +22,71 @@ export default function Home() {
 
   const selectedFile = selectedFilePath ? findFileByPath(files, selectedFilePath) : null;
 
+  // Helper function to try parsing and updating files incrementally
+  const tryParseAndUpdateFiles = (text: string, operation: string) => {
+    try {
+      // Extract JSON from markdown code blocks if present
+      let jsonStr = text.trim();
+      if (jsonStr.includes('```json')) {
+        const match = jsonStr.match(/```json\s*\n([\s\S]*?)\n```/);
+        if (match) {
+          jsonStr = match[1];
+        }
+      } else if (jsonStr.includes('```')) {
+        const match = jsonStr.match(/```\s*\n([\s\S]*?)\n```/);
+        if (match) {
+          jsonStr = match[1];
+        }
+      }
+
+      const parsed = JSON.parse(jsonStr);
+
+      if (parsed.files && Array.isArray(parsed.files)) {
+        const newFiles = parsed.files as Array<{ name: string; content: string }>;
+
+        if (operation === 'create') {
+          // Replace all files
+          const fileItems: FileItem[] = newFiles.map(f => ({
+            name: f.name,
+            path: f.name,
+            type: 'file',
+            content: f.content,
+          }));
+          setFiles(fileItems);
+          if (!selectedFilePath && fileItems.length > 0) {
+            setSelectedFilePath(fileItems[0].path);
+          }
+        } else {
+          // Update existing files or add new ones
+          setFiles(currentFiles => {
+            let updatedFiles = [...currentFiles];
+            newFiles.forEach(newFile => {
+              const existingFile = findFileByPath(updatedFiles, newFile.name);
+              if (existingFile) {
+                updatedFiles = updateFileContent(updatedFiles, newFile.name, newFile.content);
+              } else {
+                updatedFiles = addFile(updatedFiles, {
+                  name: newFile.name,
+                  path: newFile.name,
+                  type: 'file',
+                  content: newFile.content,
+                });
+              }
+            });
+            return updatedFiles;
+          });
+        }
+      }
+    } catch (e) {
+      // Silently fail - JSON might not be complete yet
+    }
+  };
+
   const generateCode = async (userPrompt: string) => {
     if (!userPrompt.trim() || isGenerating) return;
 
     setIsGenerating(true);
+    setStreamingText('');
     const isFirstGeneration = files.length === 0;
     if (isFirstGeneration) {
       setShowWelcome(false);
@@ -66,6 +129,12 @@ export default function Home() {
 
           const chunk = decoder.decode(value);
           accumulatedCode += chunk;
+
+          // Update streaming text in real-time
+          setStreamingText(accumulatedCode);
+
+          // Try to parse and update files incrementally
+          tryParseAndUpdateFiles(accumulatedCode, operation);
         }
       }
 
@@ -151,6 +220,11 @@ export default function Home() {
     } finally {
       setIsGenerating(false);
       setPrompt('');
+
+      // Clear streaming text after a delay to show completion
+      setTimeout(() => {
+        setStreamingText('');
+      }, 2000);
     }
   };
 
@@ -463,6 +537,12 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Generation Progress Overlay */}
+      <GenerationProgress
+        streamingText={streamingText}
+        isGenerating={isGenerating}
+      />
     </div>
   );
 }
