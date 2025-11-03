@@ -156,7 +156,7 @@ export default function Home() {
               if (done) break;
               const chunk = decoder.decode(value);
               accumulatedCode += chunk;
-              setStreamingText(accumulatedCode);
+              // Don't show raw JSON stream in autonomous mode - users will see files being added instead
             }
           }
 
@@ -173,6 +173,7 @@ export default function Home() {
 
             const parsed = JSON.parse(jsonStr);
             if (parsed.files && Array.isArray(parsed.files)) {
+              const firstNewFileName = parsed.files[0]?.name;
               setFiles(currentFiles => {
                 let updatedFiles = [...currentFiles];
                 parsed.files.forEach((newFile: any) => {
@@ -190,6 +191,10 @@ export default function Home() {
                 });
                 return updatedFiles;
               });
+              // Auto-select the first file from this task so users can see it
+              if (firstNewFileName && !selectedFilePath) {
+                setSelectedFilePath(firstNewFileName);
+              }
             }
           } catch (e) {
             console.error('Failed to parse task output:', e);
@@ -589,7 +594,7 @@ export default function Home() {
 
               {/* Code Editor or Streaming View */}
               {(view === 'split' || view === 'code') && (
-                isGenerating && streamingText && !projectPlan ? (
+                isGenerating && streamingText ? (
                   <StreamingEditor streamingText={streamingText} isGenerating={isGenerating} />
                 ) : (
                   <CodeEditor file={selectedFile} onChange={handleFileChange} />
@@ -613,6 +618,31 @@ export default function Home() {
                 </div>
               )}
             </div>
+
+            {/* Task Progress Status Bar */}
+            {currentTask && !isPlanning && (
+              <div className="border-t border-gray-800 bg-gradient-to-r from-purple-900/30 to-pink-900/30 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="relative">
+                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
+                      <div className="absolute inset-0 w-2 h-2 bg-purple-500 rounded-full animate-ping" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-purple-300">
+                        {currentTask.title}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {tasks.filter(t => t.status === 'completed').length} of {tasks.length} tasks completed
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-sm text-purple-400 font-mono">
+                    {Math.round((tasks.filter(t => t.status === 'completed').length / tasks.length) * 100)}%
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Input Bar */}
             <div className="border-t border-gray-800 bg-[#111] p-4">
@@ -683,13 +713,15 @@ export default function Home() {
         </div>
       )}
 
-      {/* Planning View Overlay */}
-      <PlanningView
-        plan={projectPlan}
-        tasks={tasks}
-        currentTask={currentTask}
-        isPlanning={isPlanning}
-      />
+      {/* Planning View Overlay - Only show during planning phase */}
+      {isPlanning && (
+        <PlanningView
+          plan={projectPlan}
+          tasks={tasks}
+          currentTask={currentTask}
+          isPlanning={isPlanning}
+        />
+      )}
     </div>
   );
 }
