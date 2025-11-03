@@ -1,8 +1,8 @@
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export const runtime = 'edge';
@@ -54,15 +54,14 @@ DESIGN QUALITY:
 
 Return ONLY valid JSON with the files array.`;
 
-    const stream = await openai.chat.completions.create({
-      model: 'gpt-4o', // Using full model for actual code generation
+    const stream = await anthropic.messages.stream({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
+      temperature: 0.7,
+      system: systemPrompt,
       messages: [
-        { role: 'system', content: systemPrompt },
         { role: 'user', content: `Execute this task: ${task.description}` }
       ],
-      stream: true,
-      temperature: 0.7,
-      max_tokens: 8000,
     });
 
     // Create a readable stream for the response
@@ -71,8 +70,8 @@ Return ONLY valid JSON with the files array.`;
       async start(controller) {
         try {
           for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || '';
-            if (content) {
+            if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+              const content = chunk.delta.text;
               controller.enqueue(encoder.encode(content));
             }
           }

@@ -1,8 +1,8 @@
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export const runtime = 'edge';
@@ -59,17 +59,17 @@ IMPORTANT:
 - Prioritize pages (1 = highest priority)
 - Return ONLY valid JSON, no markdown`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini', // Using cheaper model for planning
+    const completion = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      temperature: 0.8,
+      system: systemPrompt,
       messages: [
-        { role: 'system', content: systemPrompt },
         { role: 'user', content: `Create a comprehensive plan for: ${prompt}` }
       ],
-      temperature: 0.8,
-      max_tokens: 4000,
     });
 
-    const planText = completion.choices[0]?.message?.content || '';
+    const planText = completion.content[0].type === 'text' ? completion.content[0].text : '';
 
     // Try to extract JSON
     let jsonStr = planText.trim();

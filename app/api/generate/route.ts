@@ -1,9 +1,9 @@
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { FileItem } from '@/types';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export const runtime = 'edge';
@@ -73,10 +73,8 @@ CODE QUALITY:
 
 ALWAYS return valid JSON with the "files" array. Each file object must have "name" and "content" properties.`;
 
-    // Build conversation history for context
-    const messages: any[] = [
-      { role: 'system', content: systemPrompt },
-    ];
+    // Build messages for Claude
+    const messages: Anthropic.MessageParam[] = [];
 
     // Add context about current files if they exist
     if (currentFiles && currentFiles.length > 0 && operation !== 'create') {
@@ -85,25 +83,39 @@ ALWAYS return valid JSON with the "files" array. Each file object must have "nam
         .join('\n\n');
 
       messages.push({
-        role: 'system',
+        role: 'user',
         content: `Current project files:\n${filesContext}\n\nOperation: ${operation.toUpperCase()}`,
+      });
+      messages.push({
+        role: 'assistant',
+        content: 'I understand the current project files and the operation mode. I\'m ready to help.',
       });
     }
 
     // Add conversation history if exists
     if (conversationHistory && conversationHistory.length > 0) {
-      messages.push(...conversationHistory);
+      conversationHistory.forEach((msg: any) => {
+        if (msg.role === 'user' || msg.role === 'assistant') {
+          messages.push({
+            role: msg.role,
+            content: msg.content,
+          });
+        }
+      });
     }
 
     // Add current prompt
-    messages.push({ role: 'user', content: prompt });
+    messages.push({
+      role: 'user',
+      content: prompt,
+    });
 
-    const stream = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages,
-      stream: true,
+    const stream = await anthropic.messages.stream({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
       temperature: 0.7,
-      max_tokens: 6000,
+      system: systemPrompt,
+      messages,
     });
 
     // Create a readable stream for the response
@@ -112,8 +124,8 @@ ALWAYS return valid JSON with the "files" array. Each file object must have "nam
       async start(controller) {
         try {
           for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || '';
-            if (content) {
+            if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+              const content = chunk.delta.text;
               controller.enqueue(encoder.encode(content));
             }
           }

@@ -16,7 +16,7 @@ A modern, AI-powered platform for creating beautiful websites in seconds. Simply
 - **Progress Visualization**: Watch AI plan, design, and build your entire project step-by-step
 
 ### Core Features
-- **🤖 Hybrid AI Models**: GPT-4o-mini for planning, GPT-4o for impeccable code generation
+- **🤖 Claude Sonnet 4.5**: Latest AI model with exceptional coding capabilities and 200K context
 - **📁 Multi-File Projects**: Automatically creates proper project structures (HTML, CSS, JS files)
 - **🔄 Iterative Refinement**: Polish and improve your website without regenerating everything - AI makes surgical edits
 - **🗂️ File Explorer**: Browse, create, edit, and delete files in your project
@@ -37,7 +37,7 @@ A modern, AI-powered platform for creating beautiful websites in seconds. Simply
 ### Prerequisites
 
 - Node.js 18+ installed
-- OpenAI API key (get one at https://platform.openai.com/api-keys)
+- Anthropic API key (get one at https://console.anthropic.com/)
 
 ### Installation
 
@@ -59,9 +59,9 @@ A modern, AI-powered platform for creating beautiful websites in seconds. Simply
    cp .env.example .env
    ```
 
-   Then edit `.env` and add your OpenAI API key:
+   Then edit `.env` and add your Anthropic API key:
    ```
-   OPENAI_API_KEY=sk-your-actual-api-key-here
+   ANTHROPIC_API_KEY=sk-ant-api03-your-actual-key-here
    ```
 
 4. **Run the development server**
@@ -81,14 +81,14 @@ When you first create a project, Vibe Coder uses **Autonomous AI Agent Mode**:
 
 1. **You Say**: "Create a birdwatching website"
 
-2. **AI Planning Phase** (GPT-4o-mini):
+2. **AI Planning Phase** (Claude Sonnet 4.5):
    - Analyzes your request
    - Designs complete multi-page architecture
    - Plans design theme (colors, typography, style)
    - Breaks down into pages (Home, About, Gallery, etc.)
    - Creates detailed section-by-section plan
 
-3. **AI Execution Phase** (GPT-4o):
+3. **AI Execution Phase** (Claude Sonnet 4.5):
    - Executes each task autonomously
    - Generates Homepage → Hero Section
    - Generates Homepage → Features Grid
@@ -146,7 +146,7 @@ After initial creation, refinements use direct generation:
 
 - **Framework**: Next.js 14 (App Router)
 - **Language**: TypeScript
-- **AI Model**: OpenAI GPT-4o
+- **AI Model**: Anthropic Claude Sonnet 4.5
 - **Code Editor**: Monaco Editor (VS Code's editor)
 - **Styling**: Tailwind CSS
 - **API**: Edge Runtime for optimal performance

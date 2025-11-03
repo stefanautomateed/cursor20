@@ -1,92 +1,174 @@
 # 🤖 AI Model Configuration
 
-## Current Models
+## Current Model: Claude Sonnet 4.5
 
-Vibe Coder uses a **hybrid model approach** for optimal quality and cost:
+Vibe Coder now uses **Anthropic's Claude Sonnet 4.5** for all code generation tasks!
 
-### Planning Phase
-- **Model**: `gpt-4o-mini`
-- **Cost**: $0.15 per 1M input / $0.60 per 1M output tokens
-- **Purpose**: Creates comprehensive project plans, architecture, and task breakdowns
-- **Why**: Planning requires strategic thinking but not code generation, making the cheaper model perfect
+### Why Claude Sonnet 4.5?
+- **Exceptional Coding Quality**: Claude Sonnet 4.5 is one of the best models for code generation
+- **Large Context Window**: 200K tokens for handling complex projects
+- **Fast & Reliable**: Quick responses with consistent quality
+- **Cost-Effective**: Great balance of quality and price
+- **Latest Model**: Released May 2025 with cutting-edge capabilities
 
-### Code Generation
-- **Model**: `gpt-4o`
-- **Cost**: $2.50 per 1M input / $10.00 per 1M output tokens
-- **Purpose**: Generates actual code for each task/section
-- **Why**: Ensures impeccable, ultra-modern design quality (Stripe/Linear/Vercel level)
+## Model Details
 
-## Cost Optimization
+**Model Used**: `claude-sonnet-4-20250514`
 
-For a typical project generation:
-- **Planning**: ~2,000 tokens = $0.001
-- **Code Generation**: ~20,000 tokens per task × 5 tasks = $2.00
-- **Total**: ~$2.00 per complete website
+### All Endpoints Use Claude Sonnet 4.5:
+1. **Planning** (`/api/plan`) - Creates project architecture and task breakdown
+2. **Task Execution** (`/api/execute-task`) - Generates code for each section
+3. **Refinements** (`/api/generate`) - Makes surgical edits to existing code
 
-### Budget-Friendly Option
+## Pricing
 
-To save ~75% on costs, you can use `gpt-4o-mini` for both phases:
+**Claude Sonnet 4.5 Pricing:**
+- **Input**: $3 per million tokens
+- **Output**: $15 per million tokens
 
-**In `/app/api/execute-task/route.ts` (line 62):**
+### Cost Per Project
+For a typical autonomous project generation:
+- **Planning**: ~3,000 tokens input = $0.009
+- **Code Generation**: ~30,000 tokens input, ~20,000 tokens output per task × 5 tasks = ~$1.95
+- **Total**: ~$2 per complete website
+
+This is comparable to the OpenAI hybrid approach, but with superior code quality!
+
+## API Key Setup
+
+### Getting Your API Key
+
+1. Go to: https://console.anthropic.com/
+2. Sign up or log in
+3. Navigate to API Keys
+4. Create a new API key
+5. Copy the key (starts with `sk-ant-`)
+
+### Adding Your API Key
+
+1. **Copy the example file:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Edit `.env` and add your key:**
+   ```bash
+   ANTHROPIC_API_KEY=sk-ant-api03-your-actual-key-here
+   ```
+
+3. **That's it!** The application will automatically use your API key.
+
+### Important Notes:
+- ⚠️ Never commit your `.env` file to git (it's already in `.gitignore`)
+- 🔒 Keep your API key secret
+- 💰 Monitor usage at: https://console.anthropic.com/settings/cost
+
+## Configuration Options
+
+### Adjusting Max Tokens
+
+Edit the API routes to change token limits:
+
+**Planning** (`/app/api/plan/route.ts`, line 64):
 ```typescript
-// Change this line:
-model: 'gpt-4o', // Current
-
-// To this:
-model: 'gpt-4o-mini', // Budget-friendly
+max_tokens: 4000, // Adjust for longer plans
 ```
 
-**Trade-offs:**
-- ✅ 75% cost reduction
-- ⚠️ Slightly less creative designs
-- ⚠️ May need more refinement prompts
+**Task Execution** (`/app/api/execute-task/route.ts`, line 59):
+```typescript
+max_tokens: 8000, // Adjust for longer code sections
+```
+
+**Refinements** (`/app/api/generate/route.ts`, line 115):
+```typescript
+max_tokens: 8000, // Adjust for larger changes
+```
+
+### Adjusting Temperature
+
+Control creativity vs consistency:
+
+```typescript
+temperature: 0.7, // Range: 0.0 (deterministic) to 1.0 (creative)
+```
+
+- **0.0-0.3**: Very consistent, deterministic
+- **0.4-0.7**: Balanced (recommended)
+- **0.8-1.0**: More creative, varied outputs
 
 ## Alternative Models
 
-### If OpenAI releases GPT-5 nano (as mentioned by user)
-Once available, consider:
-- **GPT-5 nano**: $0.05 per 1M input / $0.40 per 1M output
-- Even cheaper than gpt-4o-mini
-- May be suitable for both planning and generation
-- Test quality before switching
-
-### Recommended Strategy
-1. **Start with**: Current setup (gpt-4o-mini for planning, gpt-4o for generation)
-2. **If costs are high**: Switch both to gpt-4o-mini
-3. **When GPT-5 nano available**: Test and potentially switch planning phase
-
-## Changing Models
-
-### Planning Model
-Edit `/app/api/plan/route.ts`:
+### Claude 3.5 Sonnet (Previous Version)
+If you want to use the previous version:
 ```typescript
-model: 'gpt-4o-mini', // Line 48
+model: 'claude-3-5-sonnet-20241022',
 ```
 
-### Code Generation Model
-Edit `/app/api/execute-task/route.ts`:
+### Claude Opus (Premium)
+For maximum quality (more expensive):
 ```typescript
-model: 'gpt-4o', // Line 62
+model: 'claude-opus-4-20250514',
 ```
+- **Pricing**: $15 input / $75 output per million tokens
+- Best for extremely complex requirements
 
-### Simple Mode (Refinements)
-Edit `/app/api/generate/route.ts`:
+### Claude Haiku (Budget)
+For cost optimization:
 ```typescript
-model: 'gpt-4o', // Line 100
+model: 'claude-3-5-haiku-20241022',
 ```
+- **Pricing**: $0.80 input / $4 output per million tokens
+- Good for simpler projects
 
 ## Performance Comparison
 
-| Model | Planning | Code Quality | Cost | Speed |
-|-------|----------|--------------|------|-------|
-| gpt-4o | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | $$$$ | Medium |
-| gpt-4o-mini | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | $ | Fast |
-| gpt-5-nano* | ⭐⭐⭐ | ⭐⭐⭐ | $ | Very Fast |
+| Model | Code Quality | Speed | Context | Cost |
+|-------|-------------|-------|---------|------|
+| Claude Sonnet 4.5 | ⭐⭐⭐⭐⭐ | Fast | 200K | $$ |
+| Claude Opus 4 | ⭐⭐⭐⭐⭐ | Medium | 200K | $$$$ |
+| Claude 3.5 Haiku | ⭐⭐⭐⭐ | Very Fast | 200K | $ |
 
-*Not yet available as of January 2025
+## Advantages Over OpenAI
+
+✅ **Better Code Quality**: Claude is renowned for coding capabilities
+✅ **Larger Context**: 200K vs 128K tokens
+✅ **Consistent Output**: More reliable JSON formatting
+✅ **No Rate Limits**: Generally more permissive
+✅ **Better Understanding**: Excellent at following complex instructions
 
 ## Monitoring Usage
 
-Track your API costs at: https://platform.openai.com/usage
+Track your API usage and costs:
+- Dashboard: https://console.anthropic.com/settings/cost
+- Set usage limits to avoid unexpected bills
+- Monitor token consumption per project
 
-Set up usage limits in your OpenAI dashboard to avoid unexpected bills.
+## Troubleshooting
+
+### "API key is missing" error
+- Check your `.env` file exists
+- Verify `ANTHROPIC_API_KEY` is set correctly
+- Restart your dev server after adding the key
+
+### Rate limits
+- Claude has generous rate limits
+- If you hit them, wait a moment and retry
+- Consider upgrading your plan for higher limits
+
+### Streaming issues
+- Ensure your API key has streaming permissions
+- Check console for detailed error messages
+
+## Example `.env` File
+
+```bash
+# Anthropic API Key (Required)
+ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
+
+# Optional: For debugging
+NODE_ENV=development
+```
+
+---
+
+**Ready to start?** Just add your API key and run `npm run dev`! 🚀
