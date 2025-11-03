@@ -1,29 +1,36 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import dynamic from 'next/dynamic';
-
-const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
+import FileExplorer from '@/components/FileExplorer';
+import CodeEditor from '@/components/CodeEditor';
+import { FileItem, Message } from '@/types';
+import { findFileByPath, updateFileContent, addFile, deleteFile, buildPreviewHTML, downloadProject } from '@/lib/fileUtils';
 
 export default function Home() {
   const [prompt, setPrompt] = useState('');
-  const [generatedCode, setGeneratedCode] = useState('');
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
   const [showWelcome, setShowWelcome] = useState(true);
   const [view, setView] = useState<'split' | 'code' | 'preview'>('split');
+  const [newFileName, setNewFileName] = useState('');
+  const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const selectedFile = selectedFilePath ? findFileByPath(files, selectedFilePath) : null;
 
   const generateCode = async (userPrompt: string) => {
     if (!userPrompt.trim() || isGenerating) return;
 
     setIsGenerating(true);
-    setShowWelcome(false);
+    const isFirstGeneration = files.length === 0;
+    if (isFirstGeneration) {
+      setShowWelcome(false);
+    }
+
+    // Determine operation mode
+    const operation = isFirstGeneration ? 'create' : 'refine';
 
     // Add user message to history
     const newUserMessage: Message = { role: 'user', content: userPrompt };
@@ -39,6 +46,8 @@ export default function Home() {
         body: JSON.stringify({
           prompt: userPrompt,
           conversationHistory: conversationHistory,
+          currentFiles: files,
+          operation,
         }),
       });
 
@@ -57,8 +66,80 @@ export default function Home() {
 
           const chunk = decoder.decode(value);
           accumulatedCode += chunk;
-          setGeneratedCode(accumulatedCode);
         }
+      }
+
+      // Parse the JSON response
+      try {
+        // Extract JSON from markdown code blocks if present
+        let jsonStr = accumulatedCode.trim();
+        if (jsonStr.includes('```json')) {
+          const match = jsonStr.match(/```json\s*\n([\s\S]*?)\n```/);
+          if (match) {
+            jsonStr = match[1];
+          }
+        } else if (jsonStr.includes('```')) {
+          const match = jsonStr.match(/```\s*\n([\s\S]*?)\n```/);
+          if (match) {
+            jsonStr = match[1];
+          }
+        }
+
+        const parsed = JSON.parse(jsonStr);
+
+        if (parsed.files && Array.isArray(parsed.files)) {
+          const newFiles = parsed.files as Array<{ name: string; content: string }>;
+
+          if (operation === 'create') {
+            // Replace all files
+            const fileItems: FileItem[] = newFiles.map(f => ({
+              name: f.name,
+              path: f.name,
+              type: 'file',
+              content: f.content,
+            }));
+            setFiles(fileItems);
+            setSelectedFilePath(fileItems[0]?.path || null);
+          } else {
+            // Update existing files or add new ones
+            let updatedFiles = [...files];
+            newFiles.forEach(newFile => {
+              const existingFile = findFileByPath(updatedFiles, newFile.name);
+              if (existingFile) {
+                updatedFiles = updateFileContent(updatedFiles, newFile.name, newFile.content);
+              } else {
+                updatedFiles = addFile(updatedFiles, {
+                  name: newFile.name,
+                  path: newFile.name,
+                  type: 'file',
+                  content: newFile.content,
+                });
+              }
+            });
+            setFiles(updatedFiles);
+          }
+        } else {
+          // Fallback: treat as single HTML file
+          const htmlFile: FileItem = {
+            name: 'index.html',
+            path: 'index.html',
+            type: 'file',
+            content: accumulatedCode,
+          };
+          setFiles([htmlFile]);
+          setSelectedFilePath('index.html');
+        }
+      } catch (parseError) {
+        console.error('Failed to parse JSON, treating as HTML:', parseError);
+        // Fallback: treat as single HTML file
+        const htmlFile: FileItem = {
+          name: 'index.html',
+          path: 'index.html',
+          type: 'file',
+          content: accumulatedCode,
+        };
+        setFiles([htmlFile]);
+        setSelectedFilePath('index.html');
       }
 
       // Add assistant message to history
@@ -78,33 +159,64 @@ export default function Home() {
     generateCode(prompt);
   };
 
+  const handleFileChange = (content: string) => {
+    if (selectedFilePath) {
+      setFiles(updateFileContent(files, selectedFilePath, content));
+    }
+  };
+
+  const handleFileCreate = () => {
+    setShowNewFileDialog(true);
+  };
+
+  const handleNewFileSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFileName.trim()) return;
+
+    const newFile: FileItem = {
+      name: newFileName,
+      path: newFileName,
+      type: 'file',
+      content: '',
+    };
+
+    setFiles(addFile(files, newFile));
+    setSelectedFilePath(newFileName);
+    setNewFileName('');
+    setShowNewFileDialog(false);
+  };
+
+  const handleFileDelete = (path: string) => {
+    if (confirm(`Delete ${path}?`)) {
+      setFiles(deleteFile(files, path));
+      if (selectedFilePath === path) {
+        setSelectedFilePath(files.filter(f => f.path !== path)[0]?.path || null);
+      }
+    }
+  };
+
   // Update iframe with generated code
   useEffect(() => {
-    if (iframeRef.current && generatedCode) {
+    if (iframeRef.current && files.length > 0) {
+      const html = buildPreviewHTML(files);
       const iframeDoc = iframeRef.current.contentDocument;
-      if (iframeDoc) {
+      if (iframeDoc && html) {
         iframeDoc.open();
-        iframeDoc.write(generatedCode);
+        iframeDoc.write(html);
         iframeDoc.close();
       }
     }
-  }, [generatedCode]);
+  }, [files]);
 
-  const downloadCode = () => {
-    const blob = new Blob([generatedCode], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'generated-website.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const handleDownload = () => {
+    downloadProject(files, 'vibe-project');
   };
 
   const copyCode = () => {
-    navigator.clipboard.writeText(generatedCode);
-    alert('Code copied to clipboard!');
+    if (selectedFile?.content) {
+      navigator.clipboard.writeText(selectedFile.content);
+      alert('Code copied to clipboard!');
+    }
   };
 
   return (
@@ -116,9 +228,14 @@ export default function Home() {
             <span className="text-white font-bold text-lg">V</span>
           </div>
           <h1 className="text-xl font-bold text-white">Vibe Coder</h1>
+          {!showWelcome && (
+            <span className="text-sm text-gray-500 ml-4">
+              Multi-file project • AI-powered
+            </span>
+          )}
         </div>
 
-        {!showWelcome && generatedCode && (
+        {!showWelcome && files.length > 0 && (
           <div className="flex items-center space-x-2">
             <div className="flex bg-[#1a1a1a] rounded-lg p-1">
               <button
@@ -154,7 +271,7 @@ export default function Home() {
               Copy Code
             </button>
             <button
-              onClick={downloadCode}
+              onClick={handleDownload}
               className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors text-sm font-medium"
             >
               Download
@@ -170,14 +287,14 @@ export default function Home() {
           <div className="flex-1 flex items-center justify-center p-8">
             <div className="max-w-2xl w-full space-y-8">
               <div className="text-center space-y-4">
-                <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl mx-auto flex items-center justify-center">
+                <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl mx-auto flex items-center justify-center shadow-2xl">
                   <span className="text-white font-bold text-4xl">V</span>
                 </div>
                 <h2 className="text-5xl font-bold text-white">
                   What do you want to create today?
                 </h2>
                 <p className="text-xl text-gray-400">
-                  Describe your website and watch as AI brings it to life
+                  Describe your website and watch as AI crafts it with impeccable design
                 </p>
               </div>
 
@@ -186,7 +303,7 @@ export default function Home() {
                   <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="E.g., A landing page for a coffee shop with a hero section, menu, and contact form..."
+                    placeholder="E.g., A stunning landing page for a tech startup with a hero section, features grid, and CTA..."
                     className="w-full h-32 px-6 py-4 bg-[#1a1a1a] border border-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 resize-none"
                     disabled={isGenerating}
                   />
@@ -195,7 +312,7 @@ export default function Home() {
                 <button
                   type="submit"
                   disabled={isGenerating || !prompt.trim()}
-                  className="w-full px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-700 disabled:to-gray-700 text-white rounded-xl font-semibold text-lg transition-all disabled:cursor-not-allowed"
+                  className="w-full px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-700 disabled:to-gray-700 text-white rounded-xl font-semibold text-lg transition-all disabled:cursor-not-allowed shadow-lg shadow-purple-500/20"
                 >
                   {isGenerating ? (
                     <span className="flex items-center justify-center">
@@ -203,38 +320,38 @@ export default function Home() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      Generating...
+                      Creating your website...
                     </span>
                   ) : (
-                    'Generate Website'
+                    'Generate Website ✨'
                   )}
                 </button>
               </form>
 
               <div className="grid grid-cols-3 gap-4 pt-8">
                 <button
-                  onClick={() => setPrompt('A personal portfolio website with a dark theme, showcasing projects and skills')}
-                  className="p-4 bg-[#1a1a1a] hover:bg-[#222] border border-gray-800 rounded-xl text-left transition-colors"
+                  onClick={() => setPrompt('A breathtaking personal portfolio with glassmorphism, dark theme, animated hero section, projects showcase with hover effects, skills grid, and contact form')}
+                  className="p-4 bg-[#1a1a1a] hover:bg-[#222] border border-gray-800 rounded-xl text-left transition-colors group"
                 >
-                  <div className="text-2xl mb-2">💼</div>
+                  <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">💼</div>
                   <div className="text-sm font-medium text-white">Portfolio</div>
-                  <div className="text-xs text-gray-500 mt-1">Professional showcase</div>
+                  <div className="text-xs text-gray-500 mt-1">Stunning showcase</div>
                 </button>
                 <button
-                  onClick={() => setPrompt('A modern landing page for a SaaS product with pricing tiers and features')}
-                  className="p-4 bg-[#1a1a1a] hover:bg-[#222] border border-gray-800 rounded-xl text-left transition-colors"
+                  onClick={() => setPrompt('A modern SaaS landing page with gradient hero, feature cards with icons, pricing table with hover effects, testimonials slider, and newsletter signup')}
+                  className="p-4 bg-[#1a1a1a] hover:bg-[#222] border border-gray-800 rounded-xl text-left transition-colors group"
                 >
-                  <div className="text-2xl mb-2">🚀</div>
-                  <div className="text-sm font-medium text-white">Landing Page</div>
+                  <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">🚀</div>
+                  <div className="text-sm font-medium text-white">SaaS Page</div>
                   <div className="text-xs text-gray-500 mt-1">Convert visitors</div>
                 </button>
                 <button
-                  onClick={() => setPrompt('A beautiful restaurant website with menu, gallery, and reservation form')}
-                  className="p-4 bg-[#1a1a1a] hover:bg-[#222] border border-gray-800 rounded-xl text-left transition-colors"
+                  onClick={() => setPrompt('A beautiful restaurant website with full-screen hero image, elegant menu with categories, photo gallery with lightbox, reservation form, and Google Maps integration')}
+                  className="p-4 bg-[#1a1a1a] hover:bg-[#222] border border-gray-800 rounded-xl text-left transition-colors group"
                 >
-                  <div className="text-2xl mb-2">🍽️</div>
+                  <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">🍽️</div>
                   <div className="text-sm font-medium text-white">Restaurant</div>
-                  <div className="text-xs text-gray-500 mt-1">Menu & reservations</div>
+                  <div className="text-xs text-gray-500 mt-1">Elegant dining</div>
                 </button>
               </div>
             </div>
@@ -242,38 +359,28 @@ export default function Home() {
         ) : (
           /* Code & Preview View */
           <div className="flex-1 flex flex-col">
-            {/* Code & Preview Panels */}
+            {/* Workspace */}
             <div className="flex-1 flex overflow-hidden">
-              {/* Code Panel */}
+              {/* File Explorer */}
               {(view === 'split' || view === 'code') && (
-                <div className={`${view === 'split' ? 'w-1/2' : 'w-full'} border-r border-gray-800 flex flex-col`}>
-                  <div className="px-4 py-2 bg-[#111] border-b border-gray-800">
-                    <span className="text-sm text-gray-400 font-mono">generated-website.html</span>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <MonacoEditor
-                      height="100%"
-                      defaultLanguage="html"
-                      value={generatedCode || '// Code will appear here...'}
-                      theme="vs-dark"
-                      options={{
-                        minimap: { enabled: false },
-                        fontSize: 14,
-                        lineNumbers: 'on',
-                        scrollBeyondLastLine: false,
-                        automaticLayout: true,
-                        readOnly: false,
-                      }}
-                      onChange={(value) => setGeneratedCode(value || '')}
-                    />
-                  </div>
-                </div>
+                <FileExplorer
+                  files={files}
+                  selectedFile={selectedFilePath}
+                  onFileSelect={setSelectedFilePath}
+                  onFileCreate={handleFileCreate}
+                  onFileDelete={handleFileDelete}
+                />
+              )}
+
+              {/* Code Editor */}
+              {(view === 'split' || view === 'code') && (
+                <CodeEditor file={selectedFile} onChange={handleFileChange} />
               )}
 
               {/* Preview Panel */}
               {(view === 'split' || view === 'preview') && (
-                <div className={`${view === 'split' ? 'w-1/2' : 'w-full'} flex flex-col bg-white`}>
-                  <div className="px-4 py-2 bg-[#111] border-b border-gray-800">
+                <div className={`${view === 'split' ? 'w-1/2' : 'w-full'} flex flex-col bg-white border-l border-gray-800`}>
+                  <div className="px-4 py-2 bg-[#0a0a0a] border-b border-gray-800">
                     <span className="text-sm text-gray-400 font-mono">Preview</span>
                   </div>
                   <div className="flex-1 overflow-auto">
@@ -295,7 +402,7 @@ export default function Home() {
                   type="text"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Refine your website... (e.g., 'Make the header sticky' or 'Add a contact form')"
+                  placeholder="Refine your website... (e.g., 'Make the header sticky' or 'Add smooth scroll animations')"
                   className="flex-1 px-4 py-3 bg-[#1a1a1a] border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
                   disabled={isGenerating}
                 />
@@ -310,7 +417,7 @@ export default function Home() {
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
                   ) : (
-                    'Generate'
+                    'Refine ✨'
                   )}
                 </button>
               </form>
@@ -318,6 +425,44 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* New File Dialog */}
+      {showNewFileDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowNewFileDialog(false)}>
+          <div className="bg-[#1a1a1a] border border-gray-800 rounded-xl p-6 w-96" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-white mb-4">Create New File</h3>
+            <form onSubmit={handleNewFileSubmit} className="space-y-4">
+              <input
+                type="text"
+                value={newFileName}
+                onChange={(e) => setNewFileName(e.target.value)}
+                placeholder="e.g., utils.js, extra.css"
+                className="w-full px-4 py-2 bg-[#0a0a0a] border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                autoFocus
+              />
+              <div className="flex space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewFileDialog(false);
+                    setNewFileName('');
+                  }}
+                  className="flex-1 px-4 py-2 bg-[#222] hover:bg-[#2a2a2a] text-white rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newFileName.trim()}
+                  className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 text-white rounded-lg transition-colors disabled:cursor-not-allowed"
+                >
+                  Create
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

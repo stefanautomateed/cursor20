@@ -8,14 +8,22 @@ A modern, AI-powered platform for creating beautiful websites in seconds. Simply
 
 ## ✨ Features
 
-- **🤖 AI-Powered Generation**: Uses GPT-4 to generate complete, self-contained HTML websites
+### Core Features
+- **🤖 AI-Powered Generation**: Uses GPT-4o to generate stunning, ultra-modern websites with impeccable design
+- **📁 Multi-File Projects**: Automatically creates proper project structures (HTML, CSS, JS files)
+- **🔄 Iterative Refinement**: Polish and improve your website without regenerating everything - AI makes surgical edits
+- **🗂️ File Explorer**: Browse, create, edit, and delete files in your project
 - **⚡ Real-time Streaming**: Watch your website being created in real-time
-- **👁️ Live Preview**: Instant preview of your generated website
-- **💻 Code Editor**: Edit and refine the generated code with Monaco Editor
-- **🔄 Iterative Refinement**: Continuously improve your website with follow-up prompts
-- **📱 Responsive Design**: All generated websites are mobile-friendly
-- **⬇️ Download & Share**: Export your website as a single HTML file
-- **🎨 Beautiful UI**: Modern, dark-themed interface with smooth animations
+- **👁️ Live Preview**: Instant preview that combines all project files
+- **💻 Monaco Code Editor**: Full VS Code editor with syntax highlighting and intelligent editing
+- **🎨 Impeccable Design**: Generates websites with cutting-edge aesthetics (glassmorphism, gradients, smooth animations)
+
+### Advanced Features
+- **🔍 Context-Aware AI**: AI sees all your project files and makes intelligent changes
+- **📱 Responsive Design**: All generated websites are perfectly mobile-friendly
+- **⬇️ Download & Share**: Export your complete project
+- **🎯 Multiple Views**: Toggle between Split, Code-only, and Preview-only views
+- **✨ Modern UI**: Beautiful dark-themed interface inspired by top dev tools
 
 ## 🚀 Getting Started
 
@@ -60,21 +68,41 @@ A modern, AI-powered platform for creating beautiful websites in seconds. Simply
 
 ## 🎯 How to Use
 
-1. **Start Creating**
-   - Enter a description of the website you want to create
-   - Example: "A landing page for a coffee shop with a hero section, menu, and contact form"
+### Initial Creation
+1. **Describe Your Vision**
+   - Enter a detailed description of the website you want to create
+   - Be specific about features, style, and functionality
+   - Example: "A stunning landing page for a tech startup with glassmorphism effects, animated hero section, feature grid, and pricing table"
 
-2. **Watch the Magic**
-   - The AI will generate a complete HTML website in real-time
-   - See the code and preview side-by-side
+2. **Watch AI Build Your Project**
+   - AI generates a complete multi-file project (HTML, CSS, JS)
+   - Files appear in the file explorer on the left
+   - See real-time streaming of code generation
+   - Preview updates automatically as files are created
 
-3. **Refine & Iterate**
-   - Use the input bar at the bottom to make changes
-   - Example: "Make the header sticky" or "Add a dark mode toggle"
+### Iterative Refinement
+3. **Polish & Improve**
+   - Use the input bar to refine specific aspects
+   - AI makes surgical edits without destroying your work
+   - Examples:
+     - "Make the header sticky with a blur effect"
+     - "Add smooth scroll animations"
+     - "Change the color scheme to blue and purple"
+     - "Add a contact form with validation"
 
-4. **Export Your Work**
-   - Click "Download" to save your website as an HTML file
-   - Click "Copy Code" to copy the code to your clipboard
+### File Management
+4. **Browse & Edit**
+   - Click files in the explorer to view/edit them
+   - Create new files with the + button
+   - Delete files you don't need (hover to see delete icon)
+   - Edit code directly in Monaco editor
+   - Changes reflect instantly in preview
+
+### Export & Share
+5. **Download Your Work**
+   - Click "Download" to save your complete project
+   - Click "Copy Code" to copy the current file's code
+   - All files are combined into a working website
 
 ## 🛠️ Tech Stack
 
@@ -92,10 +120,17 @@ cursor20/
 ├── app/
 │   ├── api/
 │   │   └── generate/
-│   │       └── route.ts          # AI code generation API
+│   │       └── route.ts          # AI code generation API with operation modes
 │   ├── globals.css               # Global styles
 │   ├── layout.tsx                # Root layout
 │   └── page.tsx                  # Main application page
+├── components/
+│   ├── FileExplorer.tsx          # File tree sidebar
+│   └── CodeEditor.tsx            # Monaco editor wrapper
+├── lib/
+│   └── fileUtils.ts              # File system utilities
+├── types/
+│   └── index.ts                  # TypeScript type definitions
 ├── public/                       # Static assets
 ├── .env.example                  # Environment variables template
 ├── next.config.mjs              # Next.js configuration
@@ -106,13 +141,27 @@ cursor20/
 
 ## 🎨 Example Prompts
 
-Try these prompts to get started:
+### Initial Creation Prompts
+Try these detailed prompts to get started:
 
-- "A personal portfolio website with a dark theme, showcasing projects and skills"
-- "A modern landing page for a SaaS product with pricing tiers and features"
-- "A beautiful restaurant website with menu, gallery, and reservation form"
-- "An e-commerce product page with image gallery, reviews, and add to cart button"
-- "A blog homepage with featured posts, categories, and search functionality"
+- **Portfolio**: "A breathtaking personal portfolio with glassmorphism effects, dark theme, animated hero section with gradient text, projects showcase with hover effects and smooth transitions, skills grid with icons, timeline section, and contact form"
+
+- **SaaS Landing**: "A modern SaaS landing page with gradient hero section, feature cards with icons and hover effects, pricing table with popular badge, testimonials slider with avatars, FAQ accordion, and newsletter signup with validation"
+
+- **Restaurant**: "A beautiful restaurant website with full-screen hero image, elegant menu with categories and filters, photo gallery with lightbox effect, reservation form with date picker, chef's story section, and embedded Google Maps"
+
+- **E-commerce**: "A sleek e-commerce product page with image gallery and zoom, product details with tabs, size selector, reviews section with stars, related products carousel, and add to cart animation"
+
+### Refinement Prompts
+Use these to improve your existing project:
+
+- "Make the header sticky with a subtle blur effect when scrolling"
+- "Add smooth scroll animations that trigger when elements enter viewport"
+- "Change the color scheme to use blue and purple gradients"
+- "Add a loading animation that plays when the page first loads"
+- "Implement a dark mode toggle button with smooth transitions"
+- "Add hover effects to all buttons with scale and shadow animations"
+- "Create a mobile hamburger menu with smooth slide-in animation"
 
 ## 🔧 Configuration
 
@@ -120,17 +169,40 @@ Try these prompts to get started:
 
 The AI generation uses the following settings (configurable in `app/api/generate/route.ts`):
 
-- **Model**: `gpt-4o` (OpenAI's latest model)
+- **Model**: `gpt-4o` (OpenAI's latest and most capable model)
 - **Temperature**: `0.7` (balance between creativity and consistency)
-- **Max Tokens**: `4000` (allows for comprehensive code generation)
+- **Max Tokens**: `6000` (allows for comprehensive multi-file generation)
 
-### Customization
+### Operation Modes
 
-You can customize the AI's behavior by modifying the system prompt in `app/api/generate/route.ts`:
+The system has three intelligent operation modes:
 
-```typescript
-const systemPrompt = `You are an expert web developer...`;
-```
+1. **CREATE MODE**: Initial project generation
+   - Generates complete multi-file project structure
+   - Returns HTML, CSS, and JS files separately
+   - Emphasizes ultra-modern, beautiful design
+
+2. **REFINE MODE**: Iterative improvements
+   - AI sees all existing files
+   - Makes surgical edits without destroying working code
+   - Returns only files that need changes
+
+3. **ADD MODE**: Adding new features
+   - Adds functionality while preserving existing code
+   - Creates new files or modifies existing ones as needed
+
+### Design Philosophy
+
+The AI is instructed to create websites with:
+- **Cutting-edge aesthetics**: Glassmorphism, gradients, subtle animations
+- **Perfect typography**: Modern fonts with proper hierarchy
+- **Beautiful colors**: Think Stripe, Linear, Vercel quality
+- **Smooth interactions**: Micro-interactions and hover effects
+- **Flawless responsiveness**: Mobile-first approach
+- **Clean code**: Semantic HTML, modular structure
+- **Accessibility**: ARIA labels and keyboard navigation
+
+You can customize these guidelines by modifying the system prompt in `app/api/generate/route.ts`
 
 ## 🚨 Important Notes
 

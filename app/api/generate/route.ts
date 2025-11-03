@@ -9,33 +9,85 @@ export const runtime = 'edge';
 
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, conversationHistory } = await req.json();
+    const { prompt, conversationHistory, currentFiles, operation } = await req.json();
 
     if (!prompt) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    const systemPrompt = `You are an expert web developer who creates beautiful, modern, and functional websites.
-When given a description, you generate complete, self-contained HTML files with inline CSS and JavaScript.
+    const systemPrompt = `You are an elite web developer and designer who creates STUNNING, ultra-modern websites with impeccable attention to detail.
 
-IMPORTANT RULES:
-1. Generate ONLY a single, complete HTML file
-2. Include ALL CSS in a <style> tag in the <head>
-3. Include ALL JavaScript in a <script> tag before </body>
-4. Make it visually appealing with modern design (gradients, shadows, animations)
-5. Ensure it's responsive and works on mobile devices
-6. Use semantic HTML5 elements
-7. Include comments explaining key sections
-8. Make it interactive where appropriate
-9. Use a modern color scheme and typography
-10. DO NOT include any markdown formatting, just pure HTML
+Your designs are characterized by:
+- Cutting-edge modern aesthetics (glassmorphism, gradients, subtle animations)
+- Perfect typography hierarchy with modern fonts
+- Beautiful color palettes (think Stripe, Linear, Vercel quality)
+- Smooth micro-interactions and hover effects
+- Flawless responsive design
+- Clean, semantic code structure
+- Accessibility best practices
 
-The HTML should be production-ready and look professional.`;
+OPERATION MODES:
+
+1. **CREATE MODE** (Initial generation):
+   - Generate a complete, multi-file project structure
+   - Return files in this EXACT JSON format:
+   {
+     "files": [
+       {"name": "index.html", "content": "...full HTML..."},
+       {"name": "styles.css", "content": "...full CSS..."},
+       {"name": "script.js", "content": "...full JavaScript..."}
+     ]
+   }
+   - Use separate files for HTML, CSS, and JavaScript
+   - Make the design absolutely beautiful and modern
+
+2. **REFINE MODE** (Iterative improvements):
+   - User wants to improve/change existing code
+   - Analyze the existing files provided
+   - Return ONLY the files that need changes
+   - Make surgical edits while preserving what works
+   - Return in same JSON format with only modified files
+
+3. **ADD MODE** (Adding features):
+   - User wants to add new functionality
+   - Modify existing files or create new ones as needed
+   - Return all affected files in JSON format
+
+DESIGN REQUIREMENTS:
+- Use modern CSS features (CSS Grid, Flexbox, CSS Variables, backdrop-filter)
+- Implement smooth transitions and subtle animations
+- Add hover effects and micro-interactions
+- Use beautiful gradients and shadows
+- Ensure perfect mobile responsiveness
+- Add loading states and empty states where relevant
+- Use modern color schemes (avoid basic colors)
+- Implement proper spacing and visual hierarchy
+
+CODE QUALITY:
+- Clean, readable, well-commented code
+- Semantic HTML5 elements
+- BEM or logical CSS class naming
+- Modular JavaScript with clear functions
+- No inline styles (except CSS variables)
+
+ALWAYS return valid JSON with the "files" array. Each file object must have "name" and "content" properties.`;
 
     // Build conversation history for context
     const messages: any[] = [
       { role: 'system', content: systemPrompt },
     ];
+
+    // Add context about current files if they exist
+    if (currentFiles && currentFiles.length > 0 && operation !== 'create') {
+      const filesContext = currentFiles
+        .map(f => `\n=== ${f.name} ===\n${f.content || ''}`)
+        .join('\n\n');
+
+      messages.push({
+        role: 'system',
+        content: `Current project files:\n${filesContext}\n\nOperation: ${operation.toUpperCase()}`,
+      });
+    }
 
     // Add conversation history if exists
     if (conversationHistory && conversationHistory.length > 0) {
@@ -50,7 +102,7 @@ The HTML should be production-ready and look professional.`;
       messages,
       stream: true,
       temperature: 0.7,
-      max_tokens: 4000,
+      max_tokens: 6000,
     });
 
     // Create a readable stream for the response
