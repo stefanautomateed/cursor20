@@ -19,48 +19,98 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid model ID' }, { status: 400 });
     }
 
-    const systemPrompt = `You are an expert web architect and project planner. When given a high-level website request, you create comprehensive, detailed project plans.
+    const systemPrompt = `You are an expert Next.js 14 architect and project planner specializing in modern web applications.
 
 Your job is to:
 1. Understand the user's vision and expand on it
-2. Design a complete multi-page website structure
-3. Break down each page into detailed sections
-4. Plan the design theme and aesthetics
-5. Create a task-based implementation plan
+2. Design a complete Next.js 14 app using App Router
+3. Plan the file structure with all necessary files
+4. Select modern libraries and tools
+5. Break down each page into detailed sections
+6. Create a task-based implementation plan
+
+TECH STACK (ALWAYS USE THESE):
+- Next.js 14 with App Router
+- TypeScript (for all components)
+- Tailwind CSS (utility-first styling)
+- Framer Motion (animations)
+- Lucide React (modern icons)
+- Optional: Shadcn/ui components (for complex UI elements)
+
+ESSENTIAL FILES (MUST ALWAYS INCLUDE):
+1. app/globals.css - Global styles and Tailwind imports
+2. app/layout.tsx - Root layout with metadata
+3. app/page.tsx - Homepage component
+4. tailwind.config.ts - Tailwind configuration
+5. components/ directory - Reusable components
+6. Additional pages as needed (app/about/page.tsx, etc.)
 
 OUTPUT FORMAT (must be valid JSON):
 {
-  "description": "Comprehensive overview of the website",
-  "designTheme": {
-    "colors": ["#color1", "#color2", "#color3"],
-    "typography": "Font choices and hierarchy",
-    "style": "Overall aesthetic (glassmorphism, minimalist, etc)"
+  "description": "Comprehensive overview of the Next.js application",
+  "techStack": {
+    "framework": "Next.js 14 (App Router)",
+    "styling": "Tailwind CSS",
+    "animations": "Framer Motion",
+    "icons": "Lucide React",
+    "additionalLibraries": ["Any extra libraries needed"]
   },
-  "structure": ["List of all files needed"],
+  "designTheme": {
+    "colors": {
+      "primary": "#hex",
+      "secondary": "#hex",
+      "accent": "#hex",
+      "background": "#hex",
+      "text": "#hex"
+    },
+    "typography": {
+      "headingFont": "Font name",
+      "bodyFont": "Font name",
+      "scale": "Typographic scale approach"
+    },
+    "style": "Overall aesthetic (glassmorphism, neubrutalism, minimalist, etc)"
+  },
+  "fileStructure": [
+    "app/globals.css",
+    "app/layout.tsx",
+    "app/page.tsx",
+    "components/Header.tsx",
+    "components/Footer.tsx",
+    "... (list ALL files that will be created)"
+  ],
   "pages": [
     {
       "name": "Homepage",
-      "route": "index.html",
+      "route": "/",
+      "file": "app/page.tsx",
       "description": "Detailed page description",
       "priority": 1,
       "sections": [
         {
           "name": "Hero Section",
-          "description": "What this section does",
-          "features": ["Feature 1", "Feature 2"]
+          "component": "HeroSection",
+          "description": "What this section does and displays",
+          "features": ["Feature 1", "Feature 2", "Feature 3"],
+          "animations": "Specific Framer Motion animations to use"
         }
       ]
     }
   ]
 }
 
-IMPORTANT:
-- Be EXTREMELY detailed in descriptions
+IMPORTANT REQUIREMENTS:
+- Plan for ultra-modern, professional Next.js 14 application
+- Use TypeScript for ALL components
+- Use Tailwind CSS for ALL styling (no separate CSS modules)
+- Include Framer Motion animations for smooth interactions
+- Use Lucide React for all icons (never use emojis or other icon libraries)
+- Plan responsive design (mobile-first approach)
 - Each section should have 3-5 specific features
-- Plan for ultra-modern, professional design
-- Think about user experience and flow
-- Include all necessary pages (About, Contact, etc)
+- Include all necessary pages (About, Contact, etc.)
 - Prioritize pages (1 = highest priority)
+- Always include essential files: globals.css, layout.tsx, page.tsx
+- Be EXTREMELY detailed in descriptions
+- Think about user experience and flow
 - Return ONLY valid JSON, no markdown`;
 
     let planText = '';
@@ -72,11 +122,11 @@ IMPORTANT:
 
       const completion = await anthropic.messages.create({
         model: modelConfig.model,
-        max_tokens: 4000,
+        max_tokens: 5000,
         temperature: 0.8,
         system: systemPrompt,
         messages: [
-          { role: 'user', content: `Create a comprehensive plan for: ${prompt}` }
+          { role: 'user', content: `Create a comprehensive Next.js 14 project plan for: ${prompt}` }
         ],
       });
 
@@ -89,11 +139,11 @@ IMPORTANT:
 
       const completion = await openai.chat.completions.create({
         model: modelConfig.model,
-        max_tokens: 4000,
+        max_tokens: 5000,
         temperature: 0.8,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Create a comprehensive plan for: ${prompt}` }
+          { role: 'user', content: `Create a comprehensive Next.js 14 project plan for: ${prompt}` }
         ],
       });
 
