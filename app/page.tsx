@@ -29,6 +29,7 @@ export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
   const [useAutonomousMode, setUseAutonomousMode] = useState(true); // Toggle for autonomous vs simple mode
+  const [useOrchestrator, setUseOrchestrator] = useState(false); // EXPERIMENTAL: Toggle for intelligent orchestration (disabled by default)
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -94,7 +95,7 @@ export default function Home() {
     }
   };
 
-  // Autonomous generation with AI planning + intelligent task orchestration
+  // Autonomous generation with AI planning (with optional intelligent orchestration)
   const generateAutonomously = async (userPrompt: string) => {
     setIsGenerating(true);
     setIsPlanning(true);
@@ -115,137 +116,145 @@ export default function Home() {
       setProjectPlan(plan);
       setIsPlanning(false);
 
-      // Step 2: Create tasks from plan with intelligent dependencies
+      // Step 2: Create tasks from plan
       const generatedTasks: Task[] = [];
-      const taskIdMap = new Map<string, string>(); // Maps page/section to task ID
 
-      // First, create layout/globals tasks that everything depends on
-      const layoutTaskId = 'task-layout';
-      const globalsTaskId = 'task-globals';
+      if (useOrchestrator) {
+        // EXPERIMENTAL: Create tasks with intelligent dependencies
+        console.log('[Orchestrator] Using intelligent task orchestration');
+        const taskIdMap = new Map<string, string>();
 
-      generatedTasks.push({
-        id: layoutTaskId,
-        type: 'component',
-        title: 'Root Layout & Configuration',
-        description: 'Create app/layout.tsx and basic project structure',
-        status: 'pending',
-        dependencies: [],
-      });
-
-      generatedTasks.push({
-        id: globalsTaskId,
-        type: 'style',
-        title: 'Global Styles',
-        description: 'Create app/globals.css with design system',
-        status: 'pending',
-        dependencies: [],
-      });
-
-      // Then create page tasks that depend on layout
-      plan.pages.forEach((page: any, pageIdx: number) => {
-        const pageTaskId = `task-page-${pageIdx}`;
-        taskIdMap.set(`page-${pageIdx}`, pageTaskId);
+        // First, create layout/globals tasks that everything depends on
+        const layoutTaskId = 'task-layout';
+        const globalsTaskId = 'task-globals';
 
         generatedTasks.push({
-          id: pageTaskId,
-          type: 'page',
-          title: `${page.name} Page Structure`,
-          description: `Create ${page.route}/page.tsx with main structure`,
+          id: layoutTaskId,
+          type: 'component',
+          title: 'Root Layout & Configuration',
+          description: 'Create app/layout.tsx and basic project structure',
           status: 'pending',
-          dependencies: [layoutTaskId, globalsTaskId],
+          dependencies: [],
         });
 
-        // Create section tasks that depend on their page
-        page.sections.forEach((section: any, secIdx: number) => {
-          const sectionTaskId = `task-${pageIdx}-${secIdx}`;
-          taskIdMap.set(`page-${pageIdx}-section-${secIdx}`, sectionTaskId);
+        generatedTasks.push({
+          id: globalsTaskId,
+          type: 'style',
+          title: 'Global Styles',
+          description: 'Create app/globals.css with design system',
+          status: 'pending',
+          dependencies: [],
+        });
+
+        // Then create page tasks that depend on layout
+        plan.pages.forEach((page: any, pageIdx: number) => {
+          const pageTaskId = `task-page-${pageIdx}`;
+          taskIdMap.set(`page-${pageIdx}`, pageTaskId);
 
           generatedTasks.push({
-            id: sectionTaskId,
-            type: 'section',
-            title: `${page.name} - ${section.name}`,
-            description: `${section.description}. Features: ${section.features.join(', ')}`,
+            id: pageTaskId,
+            type: 'page',
+            title: `${page.name} Page Structure`,
+            description: `Create ${page.route}/page.tsx with main structure`,
             status: 'pending',
-            dependencies: [pageTaskId], // Sections depend on page structure
+            dependencies: [layoutTaskId, globalsTaskId],
+          });
+
+          // Create section tasks that depend on their page
+          page.sections.forEach((section: any, secIdx: number) => {
+            const sectionTaskId = `task-${pageIdx}-${secIdx}`;
+            taskIdMap.set(`page-${pageIdx}-section-${secIdx}`, sectionTaskId);
+
+            generatedTasks.push({
+              id: sectionTaskId,
+              type: 'section',
+              title: `${page.name} - ${section.name}`,
+              description: `${section.description}. Features: ${section.features.join(', ')}`,
+              status: 'pending',
+              dependencies: [pageTaskId], // Sections depend on page structure
+            });
           });
         });
-      });
+      } else {
+        // SIMPLE MODE: No dependencies, just parallel execution (old behavior)
+        console.log('[Simple Mode] Using simple parallel execution');
+        plan.pages.forEach((page: any, pageIdx: number) => {
+          page.sections.forEach((section: any, secIdx: number) => {
+            generatedTasks.push({
+              id: `task-${pageIdx}-${secIdx}`,
+              type: 'section',
+              title: `${page.name} - ${section.name}`,
+              description: `${section.description}. Features: ${section.features.join(', ')}`,
+              status: 'pending',
+              dependencies: [], // No dependencies in simple mode
+            });
+          });
+        });
+      }
 
       setTasks(generatedTasks);
 
-      // Step 3: Initialize TaskOrchestrator with callbacks
-      let firstTaskExecuting = true;
-      const orchestrator = new TaskOrchestrator({
-        maxConcurrentTasks: 3, // Limit concurrency to avoid rate limits
-        maxRetries: 2,
-        enableCaching: true,
+      // Step 3: Execute tasks (with or without orchestrator)
+      if (useOrchestrator) {
+        // ===== INTELLIGENT ORCHESTRATION MODE =====
+        const layoutTaskId = 'task-layout';
+        let firstTaskExecuting = true;
+        const orchestrator = new TaskOrchestrator({
+          maxConcurrentTasks: 3,
+          maxRetries: 2,
+          enableCaching: true,
 
-        onTaskStart: (task) => {
-          console.log(`[Orchestrator] Starting: ${task.title}`);
-          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'in_progress' } : t));
+          onTaskStart: (task) => {
+            console.log(`[Orchestrator] Starting: ${task.title}`);
+            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'in_progress' } : t));
+            if (firstTaskExecuting) {
+              setCurrentTask(task);
+              firstTaskExecuting = false;
+            }
+          },
 
-          // Show streaming for the first task
-          if (firstTaskExecuting) {
-            setCurrentTask(task);
-            firstTaskExecuting = false;
-          }
-        },
-
-        onTaskComplete: (task, output) => {
-          console.log(`[Orchestrator] Completed: ${task.title}`);
-
-          // Update files with task output
-          const firstNewFileName = output[0]?.name;
-          setFiles(currentFiles => {
-            let updatedFiles = [...currentFiles];
-            output.forEach((newFile) => {
-              const existing = findFileByPath(updatedFiles, newFile.name);
-              if (existing) {
-                updatedFiles = updateFileContent(updatedFiles, newFile.name, newFile.content || '');
-              } else {
-                updatedFiles = addFile(updatedFiles, {
-                  name: newFile.name,
-                  path: newFile.name,
-                  type: 'file',
-                  content: newFile.content || '',
-                });
-              }
+          onTaskComplete: (task, output) => {
+            console.log(`[Orchestrator] Completed: ${task.title}`);
+            const firstNewFileName = output[0]?.name;
+            setFiles(currentFiles => {
+              let updatedFiles = [...currentFiles];
+              output.forEach((newFile) => {
+                const existing = findFileByPath(updatedFiles, newFile.name);
+                if (existing) {
+                  updatedFiles = updateFileContent(updatedFiles, newFile.name, newFile.content || '');
+                } else {
+                  updatedFiles = addFile(updatedFiles, {
+                    name: newFile.name,
+                    path: newFile.name,
+                    type: 'file',
+                    content: newFile.content || '',
+                  });
+                }
+              });
+              return updatedFiles;
             });
-            return updatedFiles;
-          });
+            if (firstNewFileName && !selectedFilePath) {
+              setSelectedFilePath(firstNewFileName);
+            }
+            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed', output } : t));
+          },
 
-          // Auto-select first file
-          if (firstNewFileName && !selectedFilePath) {
-            setSelectedFilePath(firstNewFileName);
-          }
+          onTaskFail: (task, error) => {
+            console.error(`[Orchestrator] Failed: ${task.title}`, error);
+            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'failed' } : t));
+          },
 
-          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed', output } : t));
-        },
+          onProgress: (metrics) => {
+            console.log(`[Orchestrator] Progress: ${metrics.completedTasks}/${metrics.totalTasks} (${metrics.cachedTasks} cached, ${metrics.failedTasks} failed)`);
+          },
+        });
 
-        onTaskFail: (task, error) => {
-          console.error(`[Orchestrator] Failed: ${task.title}`, error);
-          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'failed' } : t));
-        },
-
-        onProgress: (metrics) => {
-          console.log(`[Orchestrator] Progress: ${metrics.completedTasks}/${metrics.totalTasks} (${metrics.cachedTasks} cached, ${metrics.failedTasks} failed)`);
-        },
-      });
-
-      // Step 4: Execute tasks with orchestrator
-      const taskExecutor = async (task: Task): Promise<FileItem[]> => {
-        const isFirstTask = task.id === layoutTaskId;
-
-        try {
+        const taskExecutor = async (task: Task): Promise<FileItem[]> => {
+          const isFirstTask = task.id === layoutTaskId;
           const taskResponse = await fetch('/api/execute-task', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              task,
-              projectPlan: plan,
-              existingFiles: files,
-              modelId: selectedModelId,
-            }),
+            body: JSON.stringify({ task, projectPlan: plan, existingFiles: files, modelId: selectedModelId }),
           });
 
           if (!taskResponse.ok) throw new Error('Task execution failed');
@@ -258,17 +267,11 @@ export default function Home() {
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
-              const chunk = decoder.decode(value);
-              accumulatedCode += chunk;
-
-              // Show live streaming for the first task
-              if (isFirstTask) {
-                setStreamingText(accumulatedCode);
-              }
+              accumulatedCode += decoder.decode(value);
+              if (isFirstTask) setStreamingText(accumulatedCode);
             }
           }
 
-          // Parse task output
           let jsonStr = accumulatedCode.trim();
           if (jsonStr.includes('```json')) {
             const match = jsonStr.match(/```json\s*\n([\s\S]*?)\n```/);
@@ -279,40 +282,96 @@ export default function Home() {
           }
 
           const parsed = JSON.parse(jsonStr);
-
           if (parsed.files && Array.isArray(parsed.files)) {
-            const fileItems: FileItem[] = parsed.files.map((f: any) => ({
+            if (isFirstTask) setStreamingText('');
+            return parsed.files.map((f: any) => ({
               name: f.name,
               path: f.name,
               type: 'file' as const,
               content: f.content,
             }));
+          }
+          return [];
+        };
 
-            // Clear streaming text when first task completes
-            if (isFirstTask) {
-              setStreamingText('');
+        const completedTasks = await orchestrator.execute(generatedTasks, taskExecutor);
+        setTasks(completedTasks);
+        setCurrentTask(null);
+        console.log('[Orchestrator] Final metrics:', orchestrator.getMetrics());
+
+      } else {
+        // ===== SIMPLE PARALLEL MODE (Original behavior) =====
+        const executeTask = async (task: Task, isFirstTask: boolean) => {
+          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'in_progress' } : t));
+          if (isFirstTask) setCurrentTask(task);
+
+          try {
+            const taskResponse = await fetch('/api/execute-task', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ task, projectPlan: plan, existingFiles: files, modelId: selectedModelId }),
+            });
+
+            if (!taskResponse.ok) throw new Error('Task execution failed');
+
+            const reader = taskResponse.body?.getReader();
+            const decoder = new TextDecoder();
+            let accumulatedCode = '';
+
+            if (reader) {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                accumulatedCode += decoder.decode(value);
+                if (isFirstTask) setStreamingText(accumulatedCode);
+              }
             }
 
-            return fileItems;
+            let jsonStr = accumulatedCode.trim();
+            if (jsonStr.includes('```json')) {
+              const match = jsonStr.match(/```json\s*\n([\s\S]*?)\n```/);
+              if (match) jsonStr = match[1];
+            } else if (jsonStr.includes('```')) {
+              const match = jsonStr.match(/```\s*\n([\s\S]*?)\n```/);
+              if (match) jsonStr = match[1];
+            }
+
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.files && Array.isArray(parsed.files)) {
+              const firstNewFileName = parsed.files[0]?.name;
+              setFiles(currentFiles => {
+                let updatedFiles = [...currentFiles];
+                parsed.files.forEach((newFile: any) => {
+                  const existing = findFileByPath(updatedFiles, newFile.name);
+                  if (existing) {
+                    updatedFiles = updateFileContent(updatedFiles, newFile.name, newFile.content);
+                  } else {
+                    updatedFiles = addFile(updatedFiles, {
+                      name: newFile.name,
+                      path: newFile.name,
+                      type: 'file',
+                      content: newFile.content,
+                    });
+                  }
+                });
+                return updatedFiles;
+              });
+              if (firstNewFileName && !selectedFilePath) {
+                setSelectedFilePath(firstNewFileName);
+              }
+            }
+
+            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed' } : t));
+            if (isFirstTask) setStreamingText('');
+          } catch (error) {
+            console.error('Task execution error:', error);
+            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'failed' } : t));
           }
+        };
 
-          return [];
-        } catch (error) {
-          console.error('Task execution error:', error);
-          throw error;
-        }
-      };
-
-      // Execute with orchestrator!
-      const completedTasks = await orchestrator.execute(generatedTasks, taskExecutor);
-
-      // Update tasks with final state
-      setTasks(completedTasks);
-      setCurrentTask(null);
-
-      // Show final metrics
-      const metrics = orchestrator.getMetrics();
-      console.log('[Orchestrator] Final metrics:', metrics);
+        await Promise.all(generatedTasks.map((task, index) => executeTask(task, index === 0)));
+        setCurrentTask(null);
+      }
 
     } catch (error) {
       console.error('Autonomous generation error:', error);
@@ -477,10 +536,14 @@ export default function Home() {
     e.preventDefault();
     const isFirstGeneration = files.length === 0;
 
+    console.log('[DEBUG] handleSubmit:', { isFirstGeneration, filesCount: files.length, useAutonomousMode });
+
     // Use autonomous mode for initial generation, simple mode for refinements
     if (isFirstGeneration && useAutonomousMode) {
+      console.log('[DEBUG] Using autonomous mode');
       generateAutonomously(prompt);
     } else {
+      console.log('[DEBUG] Using refinement mode (generateCode)');
       generateCode(prompt);
     }
   };
