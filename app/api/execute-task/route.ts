@@ -1,11 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
-export const runtime = 'edge';
+// Using Node runtime for better environment variable support
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,6 +11,11 @@ export async function POST(req: NextRequest) {
     if (!task) {
       return NextResponse.json({ error: 'Task is required' }, { status: 400 });
     }
+
+    // Initialize Anthropic client inside the function to ensure env vars are loaded
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY || '',
+    });
 
     const systemPrompt = `You are an elite web developer executing a specific task within a larger project.
 
