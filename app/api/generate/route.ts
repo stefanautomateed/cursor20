@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
+import { FileItem } from '@/types';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -79,8 +80,8 @@ ALWAYS return valid JSON with the "files" array. Each file object must have "nam
 
     // Add context about current files if they exist
     if (currentFiles && currentFiles.length > 0 && operation !== 'create') {
-      const filesContext = currentFiles
-        .map(f => `\n=== ${f.name} ===\n${f.content || ''}`)
+      const filesContext = (currentFiles as FileItem[])
+        .map((f: FileItem) => `\n=== ${f.name} ===\n${f.content || ''}`)
         .join('\n\n');
 
       messages.push({
