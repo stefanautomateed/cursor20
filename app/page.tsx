@@ -8,6 +8,7 @@ import PlanningView from '@/components/PlanningView';
 import { FileItem, Message, ProjectPlan, Task } from '@/types';
 import { findFileByPath, updateFileContent, addFile, deleteFile, buildPreviewHTML, downloadProject } from '@/lib/fileUtils';
 import { AVAILABLE_MODELS, DEFAULT_MODEL_ID, getModelById } from '@/lib/modelConfig';
+import { TaskOrchestrator } from '@/lib/TaskOrchestrator';
 
 export default function Home() {
   const [prompt, setPrompt] = useState('');
@@ -93,7 +94,7 @@ export default function Home() {
     }
   };
 
-  // Autonomous generation with AI planning
+  // Autonomous generation with AI planning + intelligent task orchestration
   const generateAutonomously = async (userPrompt: string) => {
     setIsGenerating(true);
     setIsPlanning(true);
@@ -114,30 +115,126 @@ export default function Home() {
       setProjectPlan(plan);
       setIsPlanning(false);
 
-      // Step 2: Create tasks from plan
+      // Step 2: Create tasks from plan with intelligent dependencies
       const generatedTasks: Task[] = [];
+      const taskIdMap = new Map<string, string>(); // Maps page/section to task ID
+
+      // First, create layout/globals tasks that everything depends on
+      const layoutTaskId = 'task-layout';
+      const globalsTaskId = 'task-globals';
+
+      generatedTasks.push({
+        id: layoutTaskId,
+        type: 'component',
+        title: 'Root Layout & Configuration',
+        description: 'Create app/layout.tsx and basic project structure',
+        status: 'pending',
+        dependencies: [],
+      });
+
+      generatedTasks.push({
+        id: globalsTaskId,
+        type: 'style',
+        title: 'Global Styles',
+        description: 'Create app/globals.css with design system',
+        status: 'pending',
+        dependencies: [],
+      });
+
+      // Then create page tasks that depend on layout
       plan.pages.forEach((page: any, pageIdx: number) => {
+        const pageTaskId = `task-page-${pageIdx}`;
+        taskIdMap.set(`page-${pageIdx}`, pageTaskId);
+
+        generatedTasks.push({
+          id: pageTaskId,
+          type: 'page',
+          title: `${page.name} Page Structure`,
+          description: `Create ${page.route}/page.tsx with main structure`,
+          status: 'pending',
+          dependencies: [layoutTaskId, globalsTaskId],
+        });
+
+        // Create section tasks that depend on their page
         page.sections.forEach((section: any, secIdx: number) => {
+          const sectionTaskId = `task-${pageIdx}-${secIdx}`;
+          taskIdMap.set(`page-${pageIdx}-section-${secIdx}`, sectionTaskId);
+
           generatedTasks.push({
-            id: `task-${pageIdx}-${secIdx}`,
+            id: sectionTaskId,
             type: 'section',
             title: `${page.name} - ${section.name}`,
             description: `${section.description}. Features: ${section.features.join(', ')}`,
             status: 'pending',
-            dependencies: [],
+            dependencies: [pageTaskId], // Sections depend on page structure
           });
         });
       });
+
       setTasks(generatedTasks);
 
-      // Step 3: Execute tasks in parallel for speed
-      const executeTask = async (task: Task, isFirstTask: boolean) => {
-        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'in_progress' } : t));
+      // Step 3: Initialize TaskOrchestrator with callbacks
+      let firstTaskExecuting = true;
+      const orchestrator = new TaskOrchestrator({
+        maxConcurrentTasks: 3, // Limit concurrency to avoid rate limits
+        maxRetries: 2,
+        enableCaching: true,
 
-        // Show streaming for the first task to give live coding feedback
-        if (isFirstTask) {
-          setCurrentTask(task);
-        }
+        onTaskStart: (task) => {
+          console.log(`[Orchestrator] Starting: ${task.title}`);
+          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'in_progress' } : t));
+
+          // Show streaming for the first task
+          if (firstTaskExecuting) {
+            setCurrentTask(task);
+            firstTaskExecuting = false;
+          }
+        },
+
+        onTaskComplete: (task, output) => {
+          console.log(`[Orchestrator] Completed: ${task.title}`);
+
+          // Update files with task output
+          const firstNewFileName = output[0]?.name;
+          setFiles(currentFiles => {
+            let updatedFiles = [...currentFiles];
+            output.forEach((newFile) => {
+              const existing = findFileByPath(updatedFiles, newFile.name);
+              if (existing) {
+                updatedFiles = updateFileContent(updatedFiles, newFile.name, newFile.content || '');
+              } else {
+                updatedFiles = addFile(updatedFiles, {
+                  name: newFile.name,
+                  path: newFile.name,
+                  type: 'file',
+                  content: newFile.content || '',
+                });
+              }
+            });
+            return updatedFiles;
+          });
+
+          // Auto-select first file
+          if (firstNewFileName && !selectedFilePath) {
+            setSelectedFilePath(firstNewFileName);
+          }
+
+          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed', output } : t));
+        },
+
+        onTaskFail: (task, error) => {
+          console.error(`[Orchestrator] Failed: ${task.title}`, error);
+          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'failed' } : t));
+        },
+
+        onProgress: (metrics) => {
+          console.log(`[Orchestrator] Progress: ${metrics.completedTasks}/${metrics.totalTasks} (${metrics.cachedTasks} cached, ${metrics.failedTasks} failed)`);
+        },
+      });
+
+      // Step 4: Execute tasks with orchestrator
+      const taskExecutor = async (task: Task): Promise<FileItem[]> => {
+        const isFirstTask = task.id === layoutTaskId;
 
         try {
           const taskResponse = await fetch('/api/execute-task', {
@@ -171,62 +268,52 @@ export default function Home() {
             }
           }
 
-          // Parse and add files from task
-          try {
-            let jsonStr = accumulatedCode.trim();
-            if (jsonStr.includes('```json')) {
-              const match = jsonStr.match(/```json\s*\n([\s\S]*?)\n```/);
-              if (match) jsonStr = match[1];
-            } else if (jsonStr.includes('```')) {
-              const match = jsonStr.match(/```\s*\n([\s\S]*?)\n```/);
-              if (match) jsonStr = match[1];
-            }
-
-            const parsed = JSON.parse(jsonStr);
-            if (parsed.files && Array.isArray(parsed.files)) {
-              const firstNewFileName = parsed.files[0]?.name;
-              setFiles(currentFiles => {
-                let updatedFiles = [...currentFiles];
-                parsed.files.forEach((newFile: any) => {
-                  const existing = findFileByPath(updatedFiles, newFile.name);
-                  if (existing) {
-                    updatedFiles = updateFileContent(updatedFiles, newFile.name, newFile.content);
-                  } else {
-                    updatedFiles = addFile(updatedFiles, {
-                      name: newFile.name,
-                      path: newFile.name,
-                      type: 'file',
-                      content: newFile.content,
-                    });
-                  }
-                });
-                return updatedFiles;
-              });
-              // Auto-select the first file from this task so users can see it
-              if (firstNewFileName && !selectedFilePath) {
-                setSelectedFilePath(firstNewFileName);
-              }
-            }
-          } catch (e) {
-            console.error('Failed to parse task output:', e);
+          // Parse task output
+          let jsonStr = accumulatedCode.trim();
+          if (jsonStr.includes('```json')) {
+            const match = jsonStr.match(/```json\s*\n([\s\S]*?)\n```/);
+            if (match) jsonStr = match[1];
+          } else if (jsonStr.includes('```')) {
+            const match = jsonStr.match(/```\s*\n([\s\S]*?)\n```/);
+            if (match) jsonStr = match[1];
           }
 
-          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed' } : t));
+          const parsed = JSON.parse(jsonStr);
 
-          // Clear streaming text when first task completes
-          if (isFirstTask) {
-            setStreamingText('');
+          if (parsed.files && Array.isArray(parsed.files)) {
+            const fileItems: FileItem[] = parsed.files.map((f: any) => ({
+              name: f.name,
+              path: f.name,
+              type: 'file' as const,
+              content: f.content,
+            }));
+
+            // Clear streaming text when first task completes
+            if (isFirstTask) {
+              setStreamingText('');
+            }
+
+            return fileItems;
           }
+
+          return [];
         } catch (error) {
           console.error('Task execution error:', error);
-          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'failed' } : t));
+          throw error;
         }
       };
 
-      // Execute all tasks in parallel, but track the first one for streaming display
-      await Promise.all(generatedTasks.map((task, index) => executeTask(task, index === 0)));
+      // Execute with orchestrator!
+      const completedTasks = await orchestrator.execute(generatedTasks, taskExecutor);
 
+      // Update tasks with final state
+      setTasks(completedTasks);
       setCurrentTask(null);
+
+      // Show final metrics
+      const metrics = orchestrator.getMetrics();
+      console.log('[Orchestrator] Final metrics:', metrics);
+
     } catch (error) {
       console.error('Autonomous generation error:', error);
       alert('Failed to generate project. Please try again.');
