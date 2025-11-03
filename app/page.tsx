@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import FileExplorer from '@/components/FileExplorer';
 import CodeEditor from '@/components/CodeEditor';
-import GenerationProgress from '@/components/GenerationProgress';
+import StreamingEditor from '@/components/StreamingEditor';
 import PlanningView from '@/components/PlanningView';
 import { FileItem, Message, ProjectPlan, Task } from '@/types';
 import { findFileByPath, updateFileContent, addFile, deleteFile, buildPreviewHTML, downloadProject } from '@/lib/fileUtils';
@@ -587,9 +587,13 @@ export default function Home() {
                 />
               )}
 
-              {/* Code Editor */}
+              {/* Code Editor or Streaming View */}
               {(view === 'split' || view === 'code') && (
-                <CodeEditor file={selectedFile} onChange={handleFileChange} />
+                isGenerating && streamingText && !projectPlan ? (
+                  <StreamingEditor streamingText={streamingText} isGenerating={isGenerating} />
+                ) : (
+                  <CodeEditor file={selectedFile} onChange={handleFileChange} />
+                )
               )}
 
               {/* Preview Panel */}
@@ -678,12 +682,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
-      {/* Generation Progress Overlay */}
-      <GenerationProgress
-        streamingText={streamingText}
-        isGenerating={isGenerating && !isPlanning && !projectPlan}
-      />
 
       {/* Planning View Overlay */}
       <PlanningView
